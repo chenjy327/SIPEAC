@@ -401,4 +401,594 @@ print(sum(tcr_pie_df$value))
 save_table(tcr_pie_df, "/Users/mac/Desktop/Rproject/SIPEAC/Figure1/D/smrt-tcr")
 
 
-#### Figure 1D singcell IgH ====
+#### Figure 1E ====
+library(dittoSeq)
+library(SingleCellExperiment)
+library(glue)
+
+seurat_obj <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/Pacbio_v4/obj.rds")
+sce_obj <- as.SingleCellExperiment(seurat_obj)
+
+sce_obj$cell_type <- factor(
+  sce_obj$SpotLight_Anno,
+  levels = c("B", "Plasma", "T", "Myeloid", "Endothelial", "Fibroblast", "Tumor&Hepatocyte")
+)
+
+marker_genes <- c(
+  "CD19", "MS4A1",       # B cells
+  "JCHAIN", "MZB1",      # Plasma cells
+  "CD3D", "CD3E",        # T cells
+  "CD68", "CD163",       # Myeloid cells
+  "VWF", "PECAM1",       # Endothelial cells
+  "ACTA2", "COL1A1",     # Fibroblasts
+  "APOA2", "GPC3", "AKR1B10"  # Hepatocytes / tumor
+)
+
+celltype_means <- aggregateAcrossCells(
+  sce_obj,
+  ids = sce_obj$cell_type,
+  statistics = "mean",
+  use.assay.type = "logcounts",
+  subset.row = marker_genes
+)
+
+celltype_colors <- c(
+  "B" = "#238B45",
+  "Plasma" = "#FDBF6F",
+  "T" = "#CE1256",
+  "Myeloid" = "#6A3D9A",
+  "Endothelial" = "#1F78B4",
+  "Fibroblast" = "#DF65B0",
+  "Tumor&Hepatocyte" = "#C9BEE8"
+)
+
+pdf(glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig1/Fig1D/Fig1D.pdf"),
+    width = 5, height = 6)
+
+dittoHeatmap(
+  object = celltype_means,
+  assay = "logcounts",
+  cluster_cols = FALSE,
+  cluster_rows = FALSE,
+  heatmap.colors = colorRampPalette(c("#06a7cd", "white", "#e74a32"), alpha = TRUE)(100),
+  scaled.to.max = FALSE,
+  annot.by = "ids",
+  annot.colors = celltype_colors
+)
+
+dev.off()
+
+### Figure 1F ====
+cur_sample <- "2907T"
+out_dir <- glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig1/Fig1E")
+dir.create(out_dir, recursive = T)
+hcc_st <- readRDS(glue('/Users/mac/Desktop/01finalbackup/60TLS_sample_for_qianwen_backup/{cur_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds'))
+hcc_st@meta.data <-read.table(glue("/Users/mac/Desktop/01finalbackup/Bin50/Bin50经典版注释metadata/{cur_sample}.txt"),
+                              sep = "\t",
+                              header = T,
+                              row.names = 1) %>% as.data.frame()
+rownames(hcc_st@meta.data) <- str_replace(rownames(hcc_st@meta.data), "\\w{5}_", "")
+hcc_st@meta.data$SpotLight_Anno[is.na(hcc_st@meta.data$SpotLight_Anno)] <- "None"
+hcc_st@meta.data$CellSubType[is.na(hcc_st@meta.data$CellSubType)] <- "None"
+
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$Bin_Region == "Tumor_side_of_Margin_area" & hcc_st@meta.data$SpotLight_Anno == "Hepatocyte"] <- "Tumor"
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$Bin_Region == "Tumor_tissue" & hcc_st@meta.data$SpotLight_Anno == "Hepatocyte"] <- "Tumor"
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$Bin_Region == "Tumor_tissue" & hcc_st@meta.data$SpotLight_Anno == "Tumor&Hepatocyte"] <- "Tumor"
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$Bin_Region == "Tumor_tissue" & hcc_st@meta.data$CellSubType == "Tumor&Hepatocyte"] <- "Tumor"
+
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$SpotLight_Anno == "pDC"] <- "Myeloid"
+hcc_st$SpotLight_Anno[hcc_st$SpotLight_Anno == "Tumor"] <- "Hep_tumor"
+hcc_st$SpotLight_Anno <- factor(
+  hcc_st$SpotLight_Anno,
+  levels = c("B", "Plasma", "T", "Myeloid", "Endothelial", "Fibroblast", "Hep_tumor")
+)
+fill_colors <- c( "#238b45", "#fdbf6f", "#ce1256", "#6a3d9a", "#1f78b4", "#df65b0", "#cfc5ea")
+SpatialDimPython(obj = hcc_st, 
+                 prefix = glue("{out_dir}"),
+                 plot_item = "SpotLight_Anno",
+                 tmp_color = fill_colors,
+                 plot_order = c("B", "Plasma", "T", "Myeloid", "Endothelial", "Fibroblast", "Hep_tumor"),
+                 name = glue("Fig1E"))
+
+#### Figure 1G Plasma cell====
+sc_merge <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/66_sc_merged.rds")
+sc_merge_meta <- subset(sc_merge@meta.data,
+                        !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                         "2976T_B_FS_3", "2976T_B_FS_1",
+                                         "3125_P","3163_T"))
+B_obj <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/66_B_anno.rds")
+B_sub <- subset(B_obj@meta.data,  !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                                   "2976T_B_FS_3", "2976T_B_FS_1",
+                                                   "3125_P","3163_T"))
+
+cur_meta_B <- B_sub
+cur_meta_B$patient <- substr(cur_meta_B$sampleid, 1, 4)
+cur_meta_B$group <- ""
+cur_meta_B$group[cur_meta_B$sampleid %in% high_share] <- "high_share"
+cur_meta_B$group[cur_meta_B$sampleid %in% low_share] <- "low_share"
+
+
+cur_meta_B$Subtype <- cur_meta_B$sub_celltype
+cur_meta_B[cur_meta_B$sub_celltype=='Naive_B',]$Subtype <- 'Naive_B'
+cur_meta_B[cur_meta_B$sub_celltype=='Plasma',]$Subtype <- 'Plasma'
+cur_meta_B[cur_meta_B$sub_celltype %in% c('Memery_B','GCB'),]$Subtype <- 'Non_Naive_B'
+
+sc_merge_meta$patient <- substr(sc_merge_meta$sampleid, 1, 4)
+sc_count <-  sc_merge_meta %>%
+  group_by(sampleid) %>%
+  summarise(count_all = n(), .groups = "drop")
+bcr_pie_df <- cur_meta_B%>%
+  group_by(sampleid, group, Subtype) %>%
+  summarise(count = n(), .groups = "drop")
+bcr_pie_df <- bcr_pie_df %>% dplyr::left_join(sc_count)%>%
+  dplyr::group_by(sampleid, group) %>% 
+  mutate(
+    pc_ratio = count / count_all,
+    B_PC_count = sum(count),
+    pc_inB_ratio = count / B_PC_count,
+    percent = percent(pc_ratio, accuracy = 0.1),
+    label = paste0(Subtype, " (", percent, ")")
+  )
+sub <- bcr_pie_df[bcr_pie_df$Subtype == "Plasma",] %>% 
+  dplyr::arrange(desc(pc_ratio))
+sub$patient <- substr(sub$sampleid, 1,4)
+save_table(sub, glue('/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/60_pc_ratio'),
+           if_csv = T)
+
+meta_anno <- fread("/Users/mac/Desktop/01finalbackup/Bin50/Bin50_classic_celltype_metadata_merge.txt")
+meta_anno$patient <- substr(meta_anno$SampleID, 1,4 )
+st_count <-  meta_anno %>%
+  group_by(SampleID) %>%
+  summarise(spatiall_count_all = n(), .groups = "drop")
+st_bcr_pie_df <- meta_anno%>%
+  group_by(SampleID, SpotLight_Anno) %>%
+  summarise(spatial_count = n(), .groups = "drop")
+st_bcr_pie_df <- st_bcr_pie_df %>% dplyr::left_join(st_count)%>%
+  dplyr::group_by(SampleID, SpotLight_Anno) %>% 
+  mutate(
+    spatial_pc_ratio = spatial_count / spatiall_count_all
+  ) %>% as.data.frame()
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$SampleID, 1,4)
+
+bcr_pie_df <- bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(sampleid,Subtype, pc_ratio)%>% 
+  dplyr::filter(Subtype == "Plasma")
+bcr_pie_df$group <- "singlecell"
+bcr_pie_df$patient <- substr(bcr_pie_df$sampleid, 1, 4)
+
+st_bcr_pie_df <- st_bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(SampleID,SpotLight_Anno, spatial_pc_ratio)%>% 
+  dplyr::filter(SpotLight_Anno == "Plasma")
+colnames(st_bcr_pie_df) <- c("sampleid","Subtype", "pc_ratio")
+st_bcr_pie_df$group <- "stereo seq"
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$sampleid, 1, 4)
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$patient %in% bcr_pie_df$patient,]
+bcr_merge <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/merged_bcr.rds")
+
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$sampleid %in% unique(bcr_merge$sample),]
+bcr_sc_st <- rbind(bcr_pie_df, st_bcr_pie_df)
+
+bcr_sc_st$pc_fold <- bcr_sc_st$pc_ratio
+bcr_sc_st$pc_fold[bcr_sc_st$group == "singlecell"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+bcr_sc_st$pc_fold[bcr_sc_st$group == "stereo seq"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "stereo seq"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+
+p <- ggbarplot(bcr_sc_st,
+               x = "group", y = "pc_fold", color = "group",
+               palette = c("stereo seq" = "#ED7179", "singlecell" = "#FFCCBF"),
+               add = c("mean_se", "jitter"),
+               size = 0.5,
+               legend = "none" )+ 
+  scale_y_continuous(
+    limits = c(0, max(bcr_sc_st$pc_fold)),              # y轴范围
+    breaks = seq(0, max(bcr_sc_st$pc_fold), by = 1)    # 刻度间隔为2
+  )+
+  theme(    plot.title = element_text(size = 10, color = "black", face = "bold", hjust = 0.5),
+            axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)) +
+  labs(x = "", y = "Fold Change", title = "Plasma cell")+ 
+  stat_compare_means(method = "wilcox.test", label = "p.format") 
+table(bcr_sc_st$group)
+bcr_sc_st %>% 
+  dplyr::group_by(group) %>% 
+  dplyr::summarise(mean = mean(pc_fold))
+g <- bcr_sc_st[bcr_sc_st$Subtype == "Plasma",] %>% 
+  dplyr::group_by(group) %>% 
+  dplyr::summarise(mean = mean(pc_ratio))
+g$mean[2]/g$mean[1]
+save_plot(p, glue("/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/PC_sc_st_fold"),
+          width = 3, height = 4, if_png = T, if_pdf = T)
+
+
+
+#### Figure 1G naiveb ====
+sc_merge_meta <- subset(sc_merge@meta.data,
+                        !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                         "2976T_B_FS_3", "2976T_B_FS_1",
+                                         "3125_P","3163_T"))
+B_sub <- subset(B_obj@meta.data,  !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                                   "2976T_B_FS_3", "2976T_B_FS_1",
+                                                   "3125_P","3163_T"))
+
+cur_meta_B <- B_sub
+cur_meta_B$patient <- substr(cur_meta_B$sampleid, 1, 4)
+cur_meta_B$group <- ""
+cur_meta_B$group[cur_meta_B$sampleid %in% high_share] <- "high_share"
+cur_meta_B$group[cur_meta_B$sampleid %in% low_share] <- "low_share"
+
+
+cur_meta_B$Subtype <- cur_meta_B$sub_celltype
+cur_meta_B[cur_meta_B$sub_celltype=='Naive_B',]$Subtype <- 'Naive_B'
+cur_meta_B[cur_meta_B$sub_celltype=='Plasma',]$Subtype <- 'Plasma'
+cur_meta_B[cur_meta_B$sub_celltype %in% c('Memery_B','GCB'),]$Subtype <- 'Non_Naive_B'
+
+sc_merge_meta$patient <- substr(sc_merge_meta$sampleid, 1, 4)
+sc_count <-  sc_merge_meta %>%
+  group_by(sampleid) %>%
+  summarise(count_all = n(), .groups = "drop")
+bcr_pie_df <- cur_meta_B%>%
+  group_by(sampleid, group, Subtype) %>%
+  summarise(count = n(), .groups = "drop")
+bcr_pie_df <- bcr_pie_df %>% dplyr::left_join(sc_count)%>%
+  dplyr::group_by(sampleid, group) %>% 
+  mutate(
+    pc_ratio = count / count_all,
+    B_PC_count = sum(count),
+    pc_inB_ratio = count / B_PC_count,
+    percent = percent(pc_ratio, accuracy = 0.1),
+    label = paste0(Subtype, " (", percent, ")")
+  )
+sub <- bcr_pie_df[bcr_pie_df$Subtype == "Naive_B",] %>% 
+  dplyr::arrange(desc(pc_ratio))
+sub$patient <- substr(sub$sampleid, 1,4)
+save_table(sub, glue('/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/60_naiveb_ratio'),
+           if_csv = T)
+
+
+st_count <-  meta_anno %>%
+  group_by(SampleID) %>%
+  summarise(spatiall_count_all = n(), .groups = "drop")
+
+cur_meta_T <- subset(meta_anno, SpotLight_Anno %in% c('B','Plasma'))
+table(cur_meta_T$CellSubType)
+cur_meta_T$Subtype <- ''
+cur_meta_T[cur_meta_T$CellSubType=='NaiveB',]$Subtype <- 'Naive_B'
+cur_meta_T[cur_meta_T$CellSubType=='Plasma',]$Subtype <- 'Plasma'
+cur_meta_T[cur_meta_T$Subtype=='',]$Subtype <- 'Non_Naive_B'
+table(cur_meta_T$Subtype)
+
+st_bcr_pie_df <- cur_meta_T%>%
+  group_by(SampleID, Subtype) %>%
+  summarise(spatial_count = n(), .groups = "drop")
+st_bcr_pie_df <- st_bcr_pie_df %>% dplyr::left_join(st_count)%>%
+  dplyr::group_by(SampleID, Subtype) %>% 
+  mutate(
+    spatial_pc_ratio = spatial_count / spatiall_count_all
+  ) %>% as.data.frame()
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$SampleID, 1,4)
+
+save_table(st_bcr_pie_df, glue('/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/45_st_subtype_ratio'),
+           if_csv = T)
+
+bcr_pie_df <- bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(sampleid, Subtype, pc_ratio)%>% 
+  dplyr::filter(Subtype == "Naive_B")
+bcr_pie_df$group <- "singlecell"
+bcr_pie_df$patient <- substr(bcr_pie_df$sampleid, 1, 4)
+
+st_bcr_pie_df <- st_bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(SampleID,Subtype, spatial_pc_ratio)%>% 
+  dplyr::filter(Subtype == "Naive_B")
+colnames(st_bcr_pie_df) <- c("sampleid","Subtype", "pc_ratio")
+st_bcr_pie_df$group <- "stereo seq"
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$sampleid, 1, 4)
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$patient %in% bcr_pie_df$patient,]
+
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$sampleid %in% unique(bcr_merge$sample),]
+bcr_sc_st <- rbind(bcr_pie_df, st_bcr_pie_df)
+
+bcr_sc_st$pc_fold <- bcr_sc_st$pc_ratio
+bcr_sc_st$pc_fold[bcr_sc_st$group == "singlecell"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+bcr_sc_st$pc_fold[bcr_sc_st$group == "stereo seq"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "stereo seq"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+
+p <- ggbarplot(bcr_sc_st,
+               x = "group", y = "pc_fold", color = "group",
+               palette = c("stereo seq" = "#ED7179", "singlecell" = "#FFCCBF"),
+               add = c("mean_se", "jitter"),
+               size = 0.5,
+               legend = "none" )+ 
+  # ylim(0, 5) + 
+  # coord_cartesian(ylim = c(0, 5)) + 
+  
+  scale_y_continuous(
+    limits = c(0, max(bcr_sc_st$pc_fold)),              # y轴范围
+    breaks = seq(0, max(bcr_sc_st$pc_fold), by = 1)    # 刻度间隔为2
+  )+
+  theme(    plot.title = element_text(size = 10, color = "black", face = "bold", hjust = 0.5),
+            axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)) +
+  labs(x = "", y = "Fold Change", title = "Naive_B")+ 
+  stat_compare_means(method = "wilcox.test", label = "p.format") 
+
+save_plot(p, glue("/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/Naive_B_sc_st_fold"),
+          width = 3, height = 4, if_png = T, if_pdf = T)
+
+#### Figure 1G Antiegen B ====
+sc_merge_meta <- subset(sc_merge@meta.data,
+                        !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                         "2976T_B_FS_3", "2976T_B_FS_1",
+                                         "3125_P","3163_T"))
+B_sub <- subset(B_obj@meta.data,  !sampleid %in% c("2931T_B_FS", "2976T_B_FS_2",
+                                                   "2976T_B_FS_3", "2976T_B_FS_1",
+                                                   "3125_P","3163_T"))
+
+cur_meta_B <- B_sub
+cur_meta_B$patient <- substr(cur_meta_B$sampleid, 1, 4)
+cur_meta_B$group <- ""
+cur_meta_B$group[cur_meta_B$sampleid %in% high_share] <- "high_share"
+cur_meta_B$group[cur_meta_B$sampleid %in% low_share] <- "low_share"
+
+
+cur_meta_B$Subtype <- cur_meta_B$sub_celltype
+cur_meta_B[cur_meta_B$sub_celltype=='Naive_B',]$Subtype <- 'Naive_B'
+cur_meta_B[cur_meta_B$sub_celltype=='Plasma',]$Subtype <- 'Plasma'
+cur_meta_B[cur_meta_B$sub_celltype %in% c('Memery_B','GCB'),]$Subtype <- 'Non_Naive_B'
+
+sc_merge_meta$patient <- substr(sc_merge_meta$sampleid, 1, 4)
+sc_count <-  sc_merge_meta %>%
+  group_by(sampleid) %>%
+  summarise(count_all = n(), .groups = "drop")
+bcr_pie_df <- cur_meta_B%>%
+  group_by(sampleid, group, Subtype) %>%
+  summarise(count = n(), .groups = "drop")
+bcr_pie_df <- bcr_pie_df %>% dplyr::left_join(sc_count)%>%
+  dplyr::group_by(sampleid, group) %>% 
+  mutate(
+    pc_ratio = count / count_all,
+    B_PC_count = sum(count),
+    pc_inB_ratio = count / B_PC_count,
+    percent = percent(pc_ratio, accuracy = 0.1),
+    label = paste0(Subtype, " (", percent, ")")
+  )
+sub <- bcr_pie_df[bcr_pie_df$Subtype == "Non_Naive_B",] %>% 
+  dplyr::arrange(desc(pc_ratio))
+sub$patient <- substr(sub$sampleid, 1,4)
+save_table(sub, glue('/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/60_Non_Naive_B_ratio'),
+           if_csv = T)
+
+st_count <-  meta_anno %>%
+  group_by(SampleID) %>%
+  summarise(spatiall_count_all = n(), .groups = "drop")
+
+cur_meta_T <- subset(meta_anno, SpotLight_Anno %in% c('B','Plasma'))
+table(cur_meta_T$CellSubType)
+cur_meta_T$Subtype <- ''
+cur_meta_T[cur_meta_T$CellSubType=='NaiveB',]$Subtype <- 'Naive_B'
+cur_meta_T[cur_meta_T$CellSubType=='Plasma',]$Subtype <- 'Plasma'
+cur_meta_T[cur_meta_T$Subtype=='',]$Subtype <- 'Non_Naive_B'
+table(cur_meta_T$Subtype)
+
+st_bcr_pie_df <- cur_meta_T%>%
+  group_by(SampleID, Subtype) %>%
+  summarise(spatial_count = n(), .groups = "drop")
+st_bcr_pie_df <- st_bcr_pie_df %>% dplyr::left_join(st_count)%>%
+  dplyr::group_by(SampleID, Subtype) %>% 
+  mutate(
+    spatial_pc_ratio = spatial_count / spatiall_count_all
+  ) %>% as.data.frame()
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$SampleID, 1,4)
+
+
+bcr_pie_df <- bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(sampleid, Subtype, pc_ratio)%>% 
+  dplyr::filter(Subtype == "Non_Naive_B")
+bcr_pie_df$group <- "singlecell"
+bcr_pie_df$patient <- substr(bcr_pie_df$sampleid, 1, 4)
+
+st_bcr_pie_df <- st_bcr_pie_df %>% 
+  as.data.frame() %>% 
+  dplyr::select(SampleID,Subtype, spatial_pc_ratio)%>% 
+  dplyr::filter(Subtype == "Non_Naive_B")
+colnames(st_bcr_pie_df) <- c("sampleid","Subtype", "pc_ratio")
+st_bcr_pie_df$group <- "stereo seq"
+st_bcr_pie_df$patient <- substr(st_bcr_pie_df$sampleid, 1, 4)
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$patient %in% bcr_pie_df$patient,]
+
+st_bcr_pie_df <- st_bcr_pie_df[st_bcr_pie_df$sampleid %in% unique(bcr_merge$sample),]
+bcr_sc_st <- rbind(bcr_pie_df, st_bcr_pie_df)
+
+bcr_sc_st$pc_fold <- bcr_sc_st$pc_ratio
+bcr_sc_st$pc_fold[bcr_sc_st$group == "singlecell"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+bcr_sc_st$pc_fold[bcr_sc_st$group == "stereo seq"] <- bcr_sc_st$pc_ratio[bcr_sc_st$group == "stereo seq"]/mean(bcr_sc_st$pc_ratio[bcr_sc_st$group == "singlecell"])
+
+p <- ggbarplot(bcr_sc_st,
+               x = "group", y = "pc_fold", color = "group",
+               palette = c("stereo seq" = "#ED7179", "singlecell" = "#FFCCBF"),
+               add = c("mean_se", "jitter"),
+               size = 0.5,
+               legend = "none" )+ 
+  scale_y_continuous(
+    limits = c(0, max(bcr_sc_st$pc_fold)),              # y轴范围
+    breaks = seq(0, max(bcr_sc_st$pc_fold), by = 1)    # 刻度间隔为2
+  )+
+  theme(    plot.title = element_text(size = 10, color = "black", face = "bold", hjust = 0.5),
+            axis.text.x = element_text(angle = 45, vjust = 0.5, hjust = 0.5)) +
+  labs(x = "", y = "Fold Change", title = "Non_Naive_B")+ 
+  stat_compare_means(method = "wilcox.test", label = "p.format") 
+save_plot(p, glue("/Users/mac/Desktop/Rproject/Smrt-seq/Result/Figure1/bcr细胞类型对比/60_sample/Non_Naive_B_sc_st_fold"),
+          width = 3, height = 4, if_png = T, if_pdf = T)
+
+#### Figure 1H ====
+library(data.table)
+library(ggplot2)
+library(ggpubr)
+library(cowplot)
+library(ggbreak)
+library(grid)
+library(dplyr)
+library(glue)
+library(scales)  
+
+Changeo_BCR_ifo <- readRDS('merged_bcr.rds')
+Changeo_BCR_ifo2 <- list()
+
+cur_annotation <- 'SpotLight_Anno'
+for (cur_sample in unique(Changeo_BCR_ifo$sample)) {
+  cur_ifo <- Changeo_BCR_ifo[Changeo_BCR_ifo$sample == cur_sample,]
+  cur_ifo$sample <- cur_sample
+  cur_ifo$BinID <- paste0(cur_ifo$sample,'_',cur_ifo$Bin50)
+  cur_ifo <- dplyr::select(cur_ifo, -"CellSubType", -"SpotLight_Anno"  )
+  cur_sample2 <- paste0(substr(cur_sample,5,5),substr(cur_sample,1,4))
+  cur_meta <- fread(glue('{cur_sample}.txt'))
+  cur_meta$SpotLight_Anno <- cur_meta[[cur_annotation]]
+  cur_meta <- cur_meta[,c('BinID','SpotLight_Anno','CellSubType')]
+  
+  cur_ifo <- left_join(cur_ifo,cur_meta,by='BinID')
+  Changeo_BCR_ifo2[[cur_sample]] <- cur_ifo
+}
+merged_all <- do.call(rbind, Changeo_BCR_ifo2)
+merged_all$Bin50 <- merged_all$BinID
+
+BCR_cellrank <- list()
+
+for(cur_sample in unique(Changeo_BCR_ifo$sample)){
+  a <- merged_all[merged_all$sample == cur_sample,]
+  
+  a <- as.data.frame(table(a$SpotLight_Anno, a$Bin50)) %>% 
+    arrange(desc(Freq))
+  a$Var1 <- as.character(a$Var1)
+  a[a$Var1 %in% c('Hepatocyte','Tumor','Tumor&Hepatocyte'),]$Var1 <- 'Hep_tumor'
+  
+  cell_order <- c("B", "Plasma",  "T", "Myeloid", "Endothelial", 
+                  "Fibroblast",
+                  "Hep_tumor")
+  cel_col <- c("#238B45", "#FDBF6F",
+               "#CE1256", "#6A3D9A",
+               "#1F78B4", "#DF65B0",
+               "#C9BEE8")
+  a <- a[a$Freq != 0,]
+  a_avg <- dplyr::group_by(a, Var1) %>% 
+    dplyr::summarise(mean = mean(Freq)) %>% 
+    dplyr::arrange(desc(mean))
+  a_avg
+  a_avg$rank <- 1:nrow(a_avg)
+  a_avg$sample <- cur_sample
+  
+
+  BCR_cellrank[[cur_sample]] <- a_avg
+  
+}
+
+merged_all_avg <- do.call(rbind, BCR_cellrank)
+tbl <- as.data.frame(table(merged_all_avg$Var1, merged_all_avg$rank))
+colnames(tbl) <- c("Var1", "rank", "Freq")
+
+var1_order <- tbl %>%
+  filter(rank == 1) %>%
+  arrange(desc(Freq)) %>%
+  pull(Var1)
+tbl$Var1 <- factor(tbl$Var1, levels = var1_order)
+
+pie_df <- tbl %>%
+  filter(rank == 1, Freq > 0) %>%
+  group_by(Var1) %>%
+  summarise(value = sum(Freq)) %>%
+  mutate(ratio = value / sum(value),
+         percent = percent(ratio, accuracy = 0.1),
+         label = paste0(Var1, " (", percent, ")"))
+
+cell_order <- c("B", "Plasma",  "T", "Myeloid", "Endothelial", "Fibroblast", "Hep_tumor")
+cel_col <- c("#238B45", "#FDBF6F", "#CE1256", "#6A3D9A", "#1F78B4", "#DF65B0", "#C9BEE8")
+names(cel_col) <- cell_order
+
+p <- ggpie(pie_df,
+           x = "value",
+           label = "label",
+           fill = "Var1",
+           color = "white",
+           lab.pos = "in",
+           lab.font = "white",
+           palette = cel_col)
+
+p
+
+cowplot::save_plot(glue("BCR_rank_pie_v250623.pdf"), p, 
+                   base_width = 6, base_height = 6)
+
+
+#### Figure 1I ====
+
+library(dittoSeq)
+library(scater)
+library(patchwork)
+library(cowplot)
+library(viridis)
+library(glue)
+library(dplyr)
+
+# 设置当前样本名
+current_sample <- "2907T"
+
+# 输出目录
+output_dir <- glue("~")
+dir.create(output_dir, recursive = TRUE)
+
+st_data <- readRDS(glue("~/{current_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds"))
+
+st_meta <- read.table(
+  glue("~/{current_sample}.txt"),
+  sep = "\t", header = TRUE, row.names = 1
+) %>% as.data.frame()
+
+st_data@meta.data <- st_meta
+
+st_data <- ST_nor_sca(st_data)
+
+st_data@meta.data$cell_type <- st_data@meta.data$SpotLight_Anno
+st_data@meta.data$cell_type[st_data@meta.data$CellSubType == "Tumor"] <- "Tumor"
+st_data@meta.data$cell_type[st_data@meta.data$cell_type == "pDC"] <- "Myeloid"
+
+st_data@meta.data <- st_data@meta.data %>%
+  mutate(bin_id = rownames(st_data@meta.data))
+rownames(st_data@meta.data) <- st_data@meta.data$bin_id
+
+
+# ===== 1. 
+marker_genes <- c( "MS4A1","JCHAIN")
+
+for (gene in marker_genes) {
+  SpatialFeaturePython(
+    obj = st_data,
+    if_gene = TRUE,
+    plot_item = gene,
+    prefix = output_dir,
+    if_tls_contour = "F",
+    if_count = T,
+    name = glue("{current_sample}_{gene}")
+  )
+}
+
+# ===== 2. 
+cell_types_to_plot <- c("B", "Plasma")
+
+for (cell_type in cell_types_to_plot) {
+  SpatialDimPython(
+    obj = st_data,
+    prefix = output_dir,
+    plot_item = "cell_type",
+    plot_order = cell_type,
+    tmp_color = c("#e84115"),
+    name = glue("{cell_type}")
+  )
+}
+
+
+
+
+
+
+
+
+

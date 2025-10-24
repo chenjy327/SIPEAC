@@ -1,887 +1,1099 @@
-accuracy_results <- list()
-allelic_summary <- fread(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/summary_e100.tsv')) %>% as.data.frame()
-allelic_summary$repair_accuracy <- NA
-
-for (i in 1:nrow(allelic_summary)) {
-  sample_id <- allelic_summary$cur_sample[i]
-  threshold_value <- allelic_summary$threshold[i]
-  bin_size <- allelic_summary$bin_size[i]
-  result_dir <- glue("/Users/mac/Desktop/Rproject/findlight/version5/repair_result/bin{bin_size}/{sample_id}_{threshold_value}")
-  
-  file_names <- list.files(result_dir)
-  if (length(file_names) == 0) next
-  
-  result_file <- file_names[grepl('analysis_result', file_names)]
-  repair_data <- fread(glue('{result_dir}/{result_file}')) %>% as.data.frame()
-  repair_data$pair_prediction <- paste0(repair_data$chainA, '_', repair_data$chainB)
-  repair_data <- dplyr::distinct(repair_data, pair_prediction, .keep_all = TRUE)
-  
-  ground_truth <- read.table(glue('/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin{bin_size}/{sample_id}.tsv'),
-                             header = TRUE, row.names = NULL)
-  
-  repair_data <- repair_data[repair_data$chainA %in% ground_truth$Hclone, ]
-  allelic_summary$repair_accuracy[i] <- sum(repair_data$pair_prediction %in% ground_truth$pair_name) / nrow(repair_data)
-}
-
-allelic_summary <- allelic_summary[!is.na(allelic_summary$repair_accuracy) & !is.na(allelic_summary$acc), ]
-allelic_summary <- dplyr::arrange(allelic_summary, bin_size, threshold, cur_sample)
-# allelic_summary <- allelic_summary[!allelic_summary$cur_sample %in% c("4266B", "4309B", "B4266", "B4309"),]
-new_id <- fread("/Users/mac/Desktop/Rproject/Pacbio/newid-加上标签.csv")
-allelic_summary <- dplyr::left_join(allelic_summary, new_id, by = c("cur_sample" = "rawID"))
-write.csv(allelic_summary, glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'), quote = FALSE)
-
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
-
-df_allelic <- comparison_data
-df_allelic$value <- comparison_data$acc
-df_allelic$method <- "allelic"
-
-df_repair <- comparison_data
-df_repair$value <- comparison_data$repair_accuracy
-df_repair$method <- "repair"
-
-combined_df <- rbind(df_allelic, df_repair)
-
-for (bin in unique(combined_df$bin_size)) {
-  for (thresh in unique(combined_df$threshold)) {
-    subset_df <- combined_df[combined_df$bin_size == bin & combined_df$threshold == thresh, ]
-    acc_allelic <- subset_df$value[subset_df$method == "allelic"]
-    acc_repair <- subset_df$value[subset_df$method == "repair"]
-    p_val <- round(wilcox.test(acc_allelic, acc_repair, alternative = "two.sided")$p.value, 3)
-    
-    
-    p <- ggbarplot(subset_df, x = "method", y = "value", color = "method",
-                   palette = c(allelic="#B03060", repair="#0B7FAB"),
-                   add = c("mean_se", "jitter")) +
-      theme() +
-      labs(x = "", y = "Accuracy", title = glue("p = {p_val}"))
-    
-    save_plot(p, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/accbar_{bin}_{thresh}"),
-              width = 3, height = 4, if_pdf = TRUE)
-  }
-}
-bin <- 110; thresh <- 1;
-subset_df <- combined_df[combined_df$bin_size == bin & combined_df$threshold == thresh, ]
-dplyr::group_by(subset_df, method) %>% dplyr::summarise(mean = mean(value))
-
-
-# Line Plot for Accuracies across Thresholds
-plot_df <- combined_df[combined_df$bin_size %in% c(20, 50, 110), ]
-
-p_line <- ggline(plot_df, x = "threshold", y = "value", color = "method",
-                 add = c("mean_se"), palette = c(allelic="#B03060", repair="#0B7FAB"),
-                 facet.by = "bin_size") +
-  labs(x = "", y = "") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/accline"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/accline"),
-          width = 10, height = 5, if_png = TRUE)
-
-# ANOVA Tests for Each Bin Size
-for (bin in c(20, 50, 110)) {
-  df_bin <- plot_df[plot_df$bin_size == bin, ]
-  print(summary(aov(value ~ method, data = df_bin)))
-}
-
-# Individual Line Plots by Bin Size
-for (bin in unique(comparison_data$bin_size)) {
-  p_bin <- ggline(combined_df[combined_df$bin_size == bin, ], "threshold", "value", color = "method",
-                  add = c("mean_se"), palette = c(allelic="#B03060", repair="#0B7FAB"), facet.by = "bin_size") +
-    labs(x = "", y = "", title = glue("Bin {bin}")) +
-    theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-  
-  save_plot(p_bin, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/accline_{bin}"),
-            width = 4, height = 4, if_png = TRUE)
-  save_plot(p_bin, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/accline_{bin}"),
-            width = 4, height = 4, if_pdf = TRUE)
-}
-bin <- 20;threshold = 1;
-subset_df <- combined_df[combined_df$bin_size == bin & combined_df$threshold == thresh, ]
-dplyr::group_by(subset_df, method) %>% dplyr::summarise(mean = mean(value))
-
-
-
-library(dplyr)
-library(ggpubr)
 library(glue)
-
-# 1. 读取原始数据
-data_raw <- read.csv('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv')
-
-# 2. 创建唯一实验组标识符（样本_阈值）
-data_raw$sample_id <- paste(data_raw$cur_sample, data_raw$threshold, sep = "_")
-
-# 3. 按阈值和eff排序；去除缺失acc值的数据
-data_clean <- data_raw %>%
-  arrange(threshold, eff) %>%
-  filter(!is.na(acc))
-
-# 4. 构建实验组数据（不同bin_size下的eff值）
-exp_data <- data_clean %>%
-  mutate(
-    value = eff,
-    group = paste0("Bin", bin_size)
-  )
-
-# 5. 构建“修复”组（对照组），value 设为常数 1
-repair_data <- data_clean %>%
-  mutate(
-    value = 1,
-    group = "repair"
-  )
-
-# 6. 合并数据
-combined_data <- bind_rows(exp_data, repair_data)
-
-# 7. 仅保留指定bin_size的数据
-bin_list <- c(20, 50, 110)
-combined_data <- combined_data %>%
-  filter(bin_size %in% bin_list | group == "repair") %>%
-  mutate(
-    group = factor(group, levels = c("Bin20", "Bin50", "Bin110", "repair")),
-    threshold = as.character(threshold)
-  )
-
-# 8. 绘图：按group显示eff值随threshold的变化
-p <- ggline(
-  combined_data, 
-  x = "threshold", 
-  y = "value", 
-  color = "group",
-  add = "mean_se",
-  palette = c(
-    "Bin110" = "#c51b7d",
-    "Bin50" = "#6a3d9a",
-    "Bin20" = "#EE3743",
-    "repair" = "#0B7FAB"
-  )
-)
-
-# 9. 保存图像为 PNG 和 PDF
-output_path <- "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/eff_line_2"
-# save_plot(p, glue("{output_path}"), width = 4, height = 4, if_png = TRUE)
-save_plot(p, glue("{output_path}"), width = 4, height = 4, if_pdf = TRUE)
+library(readxl)
+library(readr)
+library(dplyr)
+library(stringr)
 
 
-library(extrafont)
-# 确保你已经导入字体
-font_import() # 只需第一次运行
-loadfonts()
 
-# 设置字体
-par(family = "Arial Unicode MS")  # 或其他支持μ的字体
+#### get tree ====
 
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
+## 抗体mapping 45个样本  ====
+pacbio_merge <-  readRDS("~/45sample_bcr0626.rds")
+sample_45 <-  pacbio_merge$sample %>% unique()
+seq_info_merge <- list()
+pacbio_sc_info <- fread("~/Pacbio_SingleCell_43.csv")
+sample_45[!sample_45 %in% pacbio_sc_info$SampleID]
+pacbio_sc_info$SampleID[!pacbio_sc_info$SampleID %in% sample_45]
 
-df_allelic <- comparison_data
-df_allelic$value <- comparison_data$acc
-df_allelic$method <- "allelic"
-
-df_repair <- comparison_data
-df_repair$value <- comparison_data$repair_accuracy
-df_repair$method <- "repair"
-
-combined_df <- rbind(df_allelic, df_repair)
-
-plot_df <- combined_df[combined_df$bin_size %in% c(20, 50, 110), ]
-plot_df$resolution <- plot_df$bin_size
-plot_df$resolution[plot_df$bin_size == 20] <- "10\u03bcm"
-plot_df$resolution[plot_df$bin_size == 50] <- "25\u03bcm"
-plot_df$resolution[plot_df$bin_size == 110] <- "55\u03bcm"
-plot_df$resolution <- factor(plot_df$resolution, levels = c("10\u03bcm", "25\u03bcm", "55\u03bcm"))
-
-
-plot_df$threshold <- as.character(plot_df$threshold)
-plot_df$threshold <- factor(plot_df$threshold, levels = c("1", "2", "5", "10", "15", "20"))
-for(current_sample in unique(plot_df$newID)){
-  p_line <- ggline(plot_df[plot_df$newID == current_sample, ], x = "threshold", y = "value", color = "method",
-                   palette = c(allelic="#B03060", repair="#0B7FAB"),
-                   facet.by = c("resolution")) +
-    labs(x = "", y = "") +
-    theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
+# pacbio_merge <- dplyr::bind_rows(pacbio_merge)
+out_dir <- "~/raw_fa"
+unlink(glue('{out_dir}/merge.fa'))
+all_seq_id <- c()
+for(cur_smrt_sample in sample_45){
+  cur_patient <- substr(cur_smrt_sample, 1, 4)
+  cur_smrt <- pacbio_merge[pacbio_merge$sample  %in%  cur_smrt_sample ,]
+  seq_info <- list()
   
-  save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/31_sample_acc/{current_sample}"),
-            width = 10, height = 5, if_pdf = TRUE)
-
-}
-
-p_line <- ggline(plot_df, x = "threshold", y = "value", color = "method",
-                 palette = c(allelic="#B03060", repair="#0B7FAB"),
-                 facet.by = c( "newID", "resolution")) +
-  labs(x = "", y = "") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/31_sample_acc/merge"),
-          width = 10, height = 40, if_pdf = TRUE)
-
-### 31 merge ====
-
-
-# fils <- list.files("/Users/mac/Desktop/Rproject/Pacbio/Result/DedupBin")
-# result_list <- list()
-# 
-# for (i in fils) {
-#   tb <- read.table(glue("/Users/mac/Desktop/Rproject/Pacbio/Result/DedupBin/{i}"), header = TRUE)
-#   
-#   tb2 <- table(tb$binid) %>% as.data.frame()
-#   colnames(tb2) <- c("binid", "Freq")
-#   
-#   
-#   result_list[[i]] <- tb2
-# }
-# 
-# combined_result <- bind_rows(result_list, .id = "filename")
-# combined_result$filename <- substr(combined_result$filename,1,5)
-# 
-tb_info <- fread("/Users/mac/Desktop/Rproject/Pacbio/newid-加上标签.csv")
-# combined_result <- merge(combined_result, tb_info, by.x = "filename", by.y = "rawID", all.x = T)
-# 
-# combined_result$newID <- factor(combined_result$newID, levels = tb_info$newID)
-# saveRDS(combined_result, "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/combined_result.rds")
-combined_result <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/combined_result.rds")
-
-# 
-# combined_result_mean <- dplyr::group_by(combined_result, newID) %>% 
-#   dplyr::summarise(freq_mean  = mean(Freq))
-# save_table(combined_result_mean, "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/UMI_count_per_Bin50")
   
-combined_result_mean <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/UMI_count_per_Bin50.txt")
-
-# merge_bcr <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/merged_bcr.rds")
-# merge_bcr <- merge(merge_bcr, tb_info, by.x = "sample", by.y = "rawID", all.x = T)
-# bcr_count <- table(merge_bcr$newID) %>% as.data.frame()
-# colnames(bcr_count) <- c("newID", "bcr_num")
-# bcr_count <- merge_bcr %>%
-#   dplyr::group_by(newID) %>% 
-#   summarise(
-#     n_IgH = sum(locus == "IGH", na.rm = TRUE),
-#     n_IgL = sum(locus != "IGH", na.rm = TRUE),
-#     bcr_num = n()
-#   )
-# merge_bcr_clone <- merge_bcr %>% 
-#   dplyr::distinct(newID, clone_id, .keep_all = T) %>% 
-#   dplyr::group_by(newID) %>% 
-#   summarise(
-#     n_IgH_clone = sum(locus == "IGH", na.rm = TRUE),
-#     n_IgL_clone = sum(locus != "IGH", na.rm = TRUE),
-#     clone_num = n()
-#   )
-# bcr_count <- dplyr::left_join(bcr_count, merge_bcr_clone)
-# save_table(bcr_count,  "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/45_sample_BCR_info")
-bcr_count <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/45_sample_BCR_info.txt")
-# merge_anno <- fread("/Users/mac/Desktop/01finalbackup/Bin50/Bin50_classic_celltype_metadata_merge.txt")
-# merge_anno <- merge_anno[merge_anno$SampleID %in% merge_bcr$sample,]
-# merge_anno <- merge(merge_anno, tb_info, by.x = "SampleID", by.y = "rawID", all.x = T)
-# cell_prop <- merge_anno %>% 
-#   dplyr::group_by(newID) %>% 
-#   dplyr::summarize(
-#     total = n(),
-#     count_B_Plasma = sum(SpotLight_Anno %in% c("B", "Plasma")),
-#     proportion = count_B_Plasma / total
-#   )
-# save_table(cell_prop, "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/cell_prop")
-cell_prop <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/cell_prop.txt")
-
-# merge_anno_count <- table(merge_anno$newID, merge_anno$SpotLight_Anno) %>% as.data.frame()
-# colnames(merge_anno_count) <- c("newID", "cell_type", "Freq")
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
-comparison_data <- dplyr::left_join(comparison_data, cell_prop, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, bcr_count, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, combined_result_mean, by = "newID")
-
-acc_mean <- comparison_data %>% 
-  dplyr::filter(threshold == 1) %>% 
-  dplyr::group_by(newID) %>% 
-  dplyr::summarise(acc_mean = mean(acc)) %>% 
-  dplyr::arrange(desc(acc_mean))
-
-comparison_data$newID <- factor(comparison_data$newID, levels = acc_mean$newID)
-comparison_data$n_Shared <- sapply(comparison_data$cur_sample, function(sample_id) {
-  file_path <- file.path(
-    "/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin50",
-    paste0(sample_id, ".tsv")
-  )
+  dir.create(glue("{out_dir}"), recursive = T)
   
-  if (file.exists(file_path)) {
-    nrow(read.table(file_path, header = TRUE, sep = "\t"))
-  } else {
-    NA  # 文件不存在时返回 NA
-  }
-})
-summary_data <- dplyr::arrange(comparison_data, newID) %>% 
-  dplyr::distinct(newID, .keep_all = T)
-
-
-summary_data <- summary_data[, c("newID", "total", "count_B_Plasma", "proportion", "bcr_num", "freq_mean")]
-summary_data <- dplyr::left_join(summary_data, acc_mean)
-save_table(summary_data, "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/summary_31_data")
-
-df_allelic <- comparison_data
-df_allelic$value <- comparison_data$acc
-df_allelic$method <- "allelic"
-
-df_repair <- comparison_data
-df_repair$value <- comparison_data$repair_accuracy
-df_repair$method <- "repair"
-
-combined_df <- rbind(df_allelic, df_repair)
-
-plot_df <- combined_df[combined_df$bin_size %in% c(20, 50, 110), ]
-plot_df$resolution <- plot_df$bin_size
-plot_df$resolution[plot_df$bin_size == 20] <- "10\u03bcm"
-plot_df$resolution[plot_df$bin_size == 50] <- "25\u03bcm"
-plot_df$resolution[plot_df$bin_size == 110] <- "55\u03bcm"
-plot_df$resolution <- factor(plot_df$resolution, levels = c("10\u03bcm", "25\u03bcm", "55\u03bcm"))
-plot_df$newID <- factor(plot_df$newID, levels = acc_mean$newID)
-
-plot_df$threshold <- as.character(plot_df$threshold)
-plot_df$threshold <- factor(plot_df$threshold, levels = c("1", "2", "5", "10", "15", "20"))
-
-
-p_line <- ggline(plot_df, x = "threshold", y = "value", color = "method",
-                 palette = c(allelic="#B03060", repair="#0B7FAB"),
-                 facet.by = c( "newID", "resolution")) +
-  labs(x = "", y = "") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/31_sample_acc/merge"),
-          width = 10, height = 40, if_pdf = TRUE)
-
-### D v2 =====
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
-cell_prop <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/cell_prop.txt")
-combined_result <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/combined_result.rds")
-combined_result_mean <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/UMI_count_per_Bin50.txt")
-bcr_count <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/45_sample_BCR_info.txt")
-comparison_data$n_Shared <- sapply(comparison_data$cur_sample, function(sample_id) {
-  file_path <- file.path(
-    "/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin50",
-    paste0(sample_id, ".tsv")
-  )
+  seq_smrt <- cur_smrt$sequence
+  names(seq_smrt) <- cur_smrt$sequence_id
+  lapply(names(seq_smrt), function(x){
+    write.table(
+      glue(">{x}"),
+      glue('{out_dir}/merge.fa'),
+      row.names = F,
+      quote = F,
+      col.names = F,
+      append = TRUE
+    )
+    write.table(seq_smrt[x],
+                glue('{out_dir}/merge.fa'),
+                row.names = F,
+                quote = F,
+                col.names = F,
+                append = TRUE)
+  })
   
-  if (file.exists(file_path)) {
-    nrow(read.table(file_path, header = TRUE, sep = "\t"))
-  } else {
-    NA  # 文件不存在时返回 NA
-  }
-})
-comparison_data <- dplyr::left_join(comparison_data, cell_prop, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, bcr_count, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, combined_result_mean, by = "newID")
-
-acc_mean <- comparison_data %>% 
-  dplyr::filter(threshold == 1) %>% 
-  dplyr::group_by(newID) %>% 
-  dplyr::summarise(acc_mean = mean(acc)) %>% 
-  dplyr::arrange(desc(acc_mean))
-acc_mean <- as.data.frame(acc_mean)
-rows_to_remove <- c(7,10,12,13,14,16,19,21,22,23,24,25,30,31)
-sample_14 <- acc_mean$newID[c(7,10,12,13,14,16,19,21,22,23,24,25,30,31)]
-
-
-comparison_out <- comparison_data %>% 
-  dplyr::select(newID, threshold, bin_size,
-                acc, repair_accuracy,
-                proportion, bcr_num, freq_mean,
-                n_IgH ,n_IgL ,bcr_num,        
-                n_IgH_clone, n_IgL_clone, clone_num,
-                n_Shared) %>% 
-  dplyr::rename(clone_size = threshold, 
-                B_Plasma_proportion = proportion,
-                UMI_count_per_Bin50 = freq_mean,
-                allelic_accuracy = acc,
-                n_bcr = bcr_num,
-                n_clone = clone_num)
-library(openxlsx)
-comparison_out$Sample_14 <- ""
-comparison_out$Sample_14[comparison_out$newID %in% sample_14] <- "True"
-write.xlsx(comparison_out %>% dplyr::distinct(newID, .keep_all = T), 
-           file = "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/31sample_Info.xlsx")
-# save_table(comparison_out, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/Figure2D_31"))
-# write.xlsx(comparison_out[comparison_out$newID %in% sample_14,] %>% dplyr::distinct(newID, .keep_all = T),
-#            file = "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/14sample_Info.xlsx")
-
-acc_mean <- acc_mean[-rows_to_remove,]
-comparison_data <- comparison_data[comparison_data$newID %in% acc_mean$newID,]
-comparison_data$newID <- factor(comparison_data$newID, levels = acc_mean$newID)
-
-df_allelic <- comparison_data
-df_allelic$value <- comparison_data$acc
-df_allelic$method <- "allelic"
-
-df_repair <- comparison_data
-df_repair$value <- comparison_data$repair_accuracy
-df_repair$method <- "repair"
-
-combined_df <- rbind(df_allelic, df_repair)
-
-plot_df <- combined_df[combined_df$bin_size %in% c(20, 50, 110), ]
-
-
-p_line <- ggline(plot_df, x = "threshold", y = "value", color = "method",
-                 add = c("mean_se"), palette = c(allelic="#B03060", repair="#0B7FAB"),
-                 facet.by = "bin_size") +
-  labs(x = "", y = "") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/FigureD_17sample"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/FigureD_17sample"),
-          width = 10, height = 5, if_png = TRUE)
-
-p_box <- ggboxplot(plot_df, x = "threshold", y = "value", color = "method",
-                 palette = c(allelic="#B03060", repair="#0B7FAB"),
-                 facet.by = "bin_size", width = 0.5) +
-  labs(x = "", y = "") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/D_box"),
-          width = 15, height = 5, if_pdf = TRUE)
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/D_box"),
-          width = 10, height = 5, if_png = TRUE)
-
-
-# ANOVA Tests for Each Bin Size
-for (bin in c(20, 50, 110)) {
-  df_bin <- plot_df[plot_df$bin_size == bin, ]
-  print(summary(aov(value ~ method, data = df_bin)))
-}
-
-
-#### 31个样本Umi per bin50和准确率的关系 ====
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
-cell_prop <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/cell_prop.txt")
-combined_result <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/combined_result.rds")
-combined_result_mean <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/UMI_count_per_Bin50.txt")
-bcr_count <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/45_sample_BCR_info.txt")
-comparison_data$n_Shared <- sapply(comparison_data$cur_sample, function(sample_id) {
-  file_path <- file.path(
-    "/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin50",
-    paste0(sample_id, ".tsv")
+  info <- data.frame(
+    id = cur_smrt$sequence_id
   )
+  info$sample <- cur_smrt_sample
+  info$type <- "smrt"
+  seq_info_merge[[glue("{cur_smrt_sample}_smrt")]] <- info[, c("id", "sample", "type")]
   
-  if (file.exists(file_path)) {
-    nrow(read.table(file_path, header = TRUE, sep = "\t"))
-  } else {
-    NA  # 文件不存在时返回 NA
-  }
-})
-comparison_data <- dplyr::left_join(comparison_data, cell_prop, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, bcr_count, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, combined_result_mean, by = "newID")
-
-acc_mean <- comparison_data %>% 
-  dplyr::filter(threshold == 1) %>% 
-  dplyr::group_by(newID) %>% 
-  dplyr::summarise(acc_mean = mean(acc)) %>% 
-  dplyr::arrange(desc(acc_mean))
-acc_mean <- as.data.frame(acc_mean)
-rows_to_remove <- c(7,10,12,13,14,16,19,21,22,23,24,25,30,31)
-sample_14 <- acc_mean$newID[c(7,10,12,13,14,16,19,21,22,23,24,25,30,31)]
-
-
-plot_df <- comparison_data %>% 
-  dplyr::rename(clone_size = threshold, 
-                B_Plasma_proportion = proportion,
-                UMI_count_per_Bin50 = freq_mean,
-                allelic_accuracy = acc,
-                n_bcr = bcr_num,
-                n_clone = clone_num)
-plot_df <- plot_df[plot_df$clone_size == 1 & plot_df$bin_size == 50,]
-correlation <- round(cor(plot_df$UMI_count_per_Bin50, plot_df$allelic_accuracy),3)
-lm_model <- lm(UMI_count_per_Bin50 ~ allelic_accuracy, data = plot_df)
-summary(lm_model)
-p <- ggplot(plot_df, aes(x=UMI_count_per_Bin50, y=allelic_accuracy)) + 
-  geom_point(color="#B03060") +
-  geom_smooth(method= "lm",color="black")+
-  labs(title="", x=glue("UMI count per Bin50"), y=glue("Allelic accuracy"),
-       subtitle = paste("r=", correlation))+
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_blank(),
-    panel.background = element_blank(),
-    axis.text.y = element_text(size = 10, color = "black", face = "bold"),
-    axis.text.x = element_text(size = 10, color = "black", face = "bold"),
-    axis.line = element_line(size = 0.6),
-    axis.title = element_text(size = 15, color = "black", face = "bold"),
-    legend.text = element_text(size = 10, color = "black", face = "bold"),
-    legend.position="none",
-  )
-save_plot(p, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/UMI_accuracy"),
-          width = 5, height = 5, if_png = TRUE)
-
-
-#### 克隆数等于10的情况下，25um分辨率情况下这31个样品的正确率跟共享BCR数目的相关性呢 ===
-comparison_data <- read.csv(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/compare.csv'))
-cell_prop <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/cell_prop.txt")
-combined_result <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/combined_result.rds")
-combined_result_mean <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/UMI_count_per_Bin50.txt")
-bcr_count <- fread("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/45_sample_BCR_info.txt")
-comparison_data$n_Shared <- sapply(comparison_data$cur_sample, function(sample_id) {
-  file_path <- file.path(
-    "/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin50",
-    paste0(sample_id, ".tsv")
-  )
   
-  if (file.exists(file_path)) {
-    nrow(read.table(file_path, header = TRUE, sep = "\t"))
-  } else {
-    NA  # 文件不存在时返回 NA
-  }
-})
-comparison_data <- dplyr::left_join(comparison_data, cell_prop, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, bcr_count, by = "newID")
-comparison_data <- dplyr::left_join(comparison_data, combined_result_mean, by = "newID")
-comparison_data <- comparison_data %>% 
-  dplyr::rename(clone_size = threshold, 
-                B_Plasma_proportion = proportion,
-                UMI_count_per_Bin50 = freq_mean,
-                allelic_accuracy = acc,
-                n_bcr = bcr_num,
-                n_clone = clone_num)
-
-merge_bcr <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/merged_bcr.rds")
-merge_bcr <- merge(merge_bcr, tb_info, by.x = "sample", by.y = "rawID", all.x = T)
-
-summary_bind <- list()
-
-for(current_sample in comparison_data$cur_sample %>% unique()){
-  grount_truth <- fread(glue("/Users/mac/Desktop/Rproject/findlight/version5/grouth_truth/bin50/{current_sample}.tsv"))
-  s_df <- comparison_data[comparison_data$cur_sample ==current_sample,]
-  new_id <-  s_df$newID[1]
-  for(current_bin_size in s_df$bin_size %>% unique()){
-    s_df_1 <- s_df[s_df$bin_size ==current_bin_size,]
-    for(current_clone_size in s_df_1$clone_size %>% unique()){
-      test_out <- fread(glue("/Users/mac/Desktop/Rproject/findlight/version5/final_version/bin{current_bin_size}/{current_sample}_test_e100.tsv"))
-      sub_out <- test_out[test_out$bin_num >= current_clone_size, ]
-      # n_Shared <- comparison_data$n_Shared[comparison_data$cur_sample ==current_sample][1]
-      n_Shared_Allelic_Predict <- nrow(sub_out)
-      n_True <- sum(sub_out$pair_name %in% grount_truth$pair_name)
-      n_Error <- sum(!sub_out$pair_name %in% grount_truth$pair_name)
-      accuracy <- n_True/n_Shared_Allelic_Predict
-      sub_df <- data.frame(
-        newID = new_id,
-        cur_sample = current_sample,
-        clone_size = current_clone_size,
-        bin_size = current_bin_size,
-        n_Shared_Allelic_Predict = n_Shared_Allelic_Predict,
-        n_True = n_True,
-        n_Error = n_Error,
-        allelic_accuracy = accuracy
-      )
-      summary_bind[[glue("{current_sample}_{current_clone_size}_{current_bin_size}")]] <- sub_df
+  idx <- which(pacbio_sc_info$SampleID %in%  cur_smrt_sample)
+  cur_sc_list <- pacbio_sc_info$SC_Path[idx[1]]
+  cur_sc_list <- strsplit(cur_sc_list, ";")[[1]]
+  cur_sc_bind <- list()
+  
+  for(cur_path in cur_sc_list){
+    subname <- basename(cur_path)
+    
+    if(!"filtered_contig_annotations.csv" %in% list.files(cur_path)){
+      print(glue("{subname} has not filtered_contig_annotations.csv !!!!!!!!!!!!!!!!!"))
+      next 
     }
+    
+    info <- fread(glue("{cur_path}/filtered_contig_annotations.csv"))
+    fa_file <- read.table(glue("{cur_path}/filtered_contig.fasta"), col.names = F)
+    fa_file[,1] <- gsub(">","",fa_file[,1] )
+    
+    contig_name_idx <- seq(1, nrow(fa_file), by = 2)
+    seq_idx <- seq(2, nrow(fa_file), by = 2)
+    seq <- fa_file[seq_idx,1]
+    seq_id <- paste(subname, fa_file[contig_name_idx,1], sep = "_")
+    names(seq) <- seq_id
+    
+    if(any(seq_id %in% all_seq_id)){
+      print(glue("{cur_patient}, {cur_path}"))
+      next
+    }
+    all_seq_id <- c(all_seq_id, seq_id)
+    
+    
+    
+    
+    if(identical(info$contig_id, fa_file[contig_name_idx,1])){
+      lapply(names(seq), function(x){
+        write.table(
+          glue(">{x}"),
+          glue('{out_dir}/merge.fa'),
+          row.names = F,
+          quote = F,
+          col.names = F,
+          append = TRUE
+        )
+        write.table(seq[x],
+                    glue('{out_dir}/merge.fa'),
+                    row.names = F,
+                    quote = F,
+                    col.names = F,
+                    append = TRUE)
+      })
+    }else{
+      warning(glue("{cur_path} not identical contig"))
+    }
+    
+    info$id <- seq_id
+    info$sample <- subname
+    info$type <- "singlecell"
+    if(paste("SC",subname, sep = "_") %in% names(seq_info_merge)){
+      print(glue("{cur_smrt_sample} {subname}"))
+    }
+    seq_info_merge[[paste("SC",subname, sep = "_")]] <- info[, c("id", "sample", "type")]
   }
+  
+  # seq_info_bind <- dplyr::bind_rows(seq_info)
+  # save_table(seq_info_bind, glue("{out_dir}/{cur_smrt_sample}_info"))
+  
+  # seq_info_merge[[cur_smrt_sample]] <- seq_info_bind
+  
+  
 }
-summary <- dplyr::bind_rows(summary_bind)
-info <- comparison_data[,c("newID", "B_Plasma_proportion", "n_IgH",
-                           "n_IgL",              
-                           "n_bcr",              
-                           "n_IgH_clone",        
-                           "n_IgL_clone",        
-                           "n_clone",            
-                           "UMI_count_per_Bin50")] %>% 
-  dplyr::distinct(newID, .keep_all = T)
-summary <- summary %>% 
-  dplyr::left_join(info)
-summary$Sample_14 <- ""
-summary$Sample_14[summary$newID %in% sample_14] <- "True"
+seq_info_merge <- dplyr::bind_rows(seq_info_merge)
+save_table(seq_info_merge, glue("~/tls_spatial_tree/merge_info"))
 
-write.xlsx(summary, 
-           file = "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
+# sh ~/run_changeo_new.sh RH05 ~/raw_fa/RH05.fa ~/changeo  ~/blastn
 
-plot_df <- summary[summary$clone_size == "10" & summary$bin_size == "50",]
-correlation <- round(cor(plot_df$n_Shared_Allelic_Predict, plot_df$allelic_accuracy),3)
-lm_model <- lm(n_Shared_Allelic_Predict ~ allelic_accuracy, data = plot_df)
-summary(lm_model)
-p <- ggplot(plot_df, aes(x=n_Shared_Allelic_Predict, y=allelic_accuracy)) + 
-  geom_point(color="#B03060") +
-  geom_smooth(method= "lm",color="black")+
-  labs(title="", x=glue("n_Shared_Allelic_Predict"), y=glue("Allelic accuracy"),
-       subtitle = paste("r=", correlation))+
-  theme(
-    panel.grid.major = element_blank(),
-    panel.grid.minor = element_blank(),
-    panel.border = element_blank(),
-    panel.background = element_blank(),
-    axis.text.y = element_text(size = 10, color = "black", face = "bold"),
-    axis.text.x = element_text(size = 10, color = "black", face = "bold"),
-    axis.line = element_line(size = 0.6),
-    axis.title = element_text(size = 15, color = "black", face = "bold"),
-    legend.text = element_text(size = 10, color = "black", face = "bold"),
-    legend.position="none",
+pacbio_merge <-  readRDS("~/45sample_bcr0626.rds")
+sample_45 <-  pacbio_merge$sample %>% unique()
+write.table(data.frame(x = sample_45), "~/sample_45.txt",col.names = F,
+            row.names = F, quote = F, sep = "\t")
+# changeo_merge <- dplyr::bind_rows(changeo_merge)
+changeo_merge <- list()
+bcr_smrt_merge <- readRDS("~/45sample_bcr0626.rds")
+
+for(t in sample_45){
+  cur_changeo <- fread(glue("~/{t}_family_07_clone-pass.tsv"))
+  cur_info <- fread(glue("~/{t}_info.txt"))
+  cur_changeo$id <- cur_changeo$sequence_id
+  cur_changeo$patient <- t
+  cur_changeo$clone_id <- paste(t, cur_changeo$clone_id, sep = "_")
+  cur_changeo$clone_family <- paste(t, cur_changeo$clone_family, sep = "_")
+  cur_changeo <- dplyr::left_join(cur_changeo, cur_info)
+  changeo_merge[[t]] <- cur_changeo
+}
+changeo_merge <- dplyr::bind_rows(changeo_merge)
+changeo_merge <- get_shared_info(changeo_merge, target_list =  c("type"), source = "clone_id")
+changeo_merge <- dplyr::rename(changeo_merge, share_label_clone = type_shared_main,
+                               share_sublabel_clone = type_shared_sub)
+table(changeo_merge$share_label_clone)
+table(changeo_merge$type)
+saveRDS(changeo_merge, "~/changeo_merge_07.rds")
+
+
+changeo_merge <- readRDS("~/changeo_merge_07.rds")
+test <- changeo_merge[changeo_merge$sample == "2907T",]
+test$sequence_id[test$type == "singlecell"][1]
+changeo_merge$clone_family_07 <- paste(changeo_merge$patient, changeo_merge$clone_family_07, sep = "_")
+ab_info <- fread("~/changeo/final_genescript2.csv")
+ab_tp53 <- c(10, 14, 18, 22, 28, 38, 39, 41, 43, 49, 55, 58, 59, 67, 72, 77, 79, 81, 86, 88, 116, 117, 118, 119, 121, 125)
+ab_ifi30 <- c(10, 14, 18, 22, 23, 28, 36, 38, 39, 41, 43, 49, 55, 58, 59, 61, 77, 79, 81, 116, 117, 118, 119, 120, 121, 124, 125, 5, 30, 67, 72, 86, 88)
+ab_2 <- intersect(ab_tp53, ab_ifi30)
+ab_tp53_u <- setdiff(ab_tp53, ab_2)
+
+ab_info$tp53 <- "n"
+ab_info <- as.data.frame(ab_info)
+ab_info$tp53[(1:nrow(ab_info)) %in% ab_tp53] <- "y"
+
+ab_info$ifi30 <- "n"
+ab_info <- as.data.frame(ab_info)
+ab_info$ifi30[(1:nrow(ab_info)) %in% ab_ifi30] <- "y"
+
+ab_info$raw_sc_id[1]
+ab_info$sequence_id <- str_replace(ab_info$raw_sc_id,"-","_")
+ab_info$id <- "n"
+ab_info$no <- 1:nrow(ab_info)
+
+
+ab_info$id[ab_info$ifi30 == "y"] <-  paste("Ig_", ab_info$no[ab_info$ifi30 == "y"], sep = "")
+ab_info$id[ab_info$tp53 == "y"] <-  paste("Ig_", ab_info$no[ab_info$tp53 == "y"], sep = "")
+# ab_info$id <- paste("Ig_", ab_info$id, sep = "")
+# test <- changeo_merge[changeo_merge$sequence_id %in% ab_info$sequence_id,]
+# table(test$sequence_id)
+# nrow(test)
+ab_ifi30_seq <- ab_info$sequence_id[ab_info$ifi30 == "y"]
+ab_ifi30_clone <- changeo_merge[changeo_merge$sequence_id %in% ab_ifi30_seq,]
+ab_ifi30_clone <- ab_ifi30_clone[ab_ifi30_clone$share_label_clone == "Shared",]
+ab_ifi30_cloneid <- ab_ifi30_clone$clone_id %>% unique()
+saveRDS(ab_ifi30_clone, "~/ab_ifi30_clone.rds")
+
+ab_tp53_seq <- ab_info$sequence_id[ab_info$tp53 == "y"]
+ab_tp53_clone <- changeo_merge[changeo_merge$sequence_id %in% ab_tp53_seq,]
+ab_tp53_clone <- ab_tp53_clone[ab_tp53_clone$share_label_clone == "Shared",]
+ab_tp53_cloneid <- ab_tp53_clone$clone_id %>% unique()
+
+saveRDS(ab_tp53_clone, "~/ab_tp53_clone.rds")
+
+ab_merge_seq <- ab_info$sequence_id[ab_info$id != "n"]
+ab_merge_clone <- changeo_merge[changeo_merge$sequence_id %in% ab_merge_seq,]
+ab_merge_clone <- ab_merge_clone[ab_merge_clone$share_label_clone == "Shared",]
+ab_merge_clone <- ab_merge_clone %>% dplyr::select(-id)
+ab_merge_clone <- dplyr::left_join(ab_merge_clone, ab_info[, c("sequence_id",
+                                                               "ifi30", "tp53", "no",
+                                                               "id")])
+ab_merge_cloneid <- ab_merge_clone$clone_id %>% unique()
+# saveRDS(ab_merge_clone, "~/ab_merge_clone.rds")
+# save_table(ab_merge_clone, "~/ab_merge_clone", if_csv = F)
+
+
+ab_merge_clonefam_id <- changeo_merge[changeo_merge$clone_id %in% ab_merge_cloneid,]$clone_family_07 %>% unique()
+ab_merge_clonefam <- changeo_merge[changeo_merge$clone_family_07 %in% ab_merge_clonefam_id,]
+ab_merge_clonefam$isotype <- substr(ab_merge_clonefam$c_call, 1, 5)
+ab_merge_clonefam$isotype[is.na(ab_merge_clonefam$isotype)] <- "IGHG1"
+ab_merge_clone$clone_subid <- ab_merge_clone$id
+ab_merge_clone %>% 
+  group_by(clone_id) %>% 
+  summarise(clone_subid = paste(sort(unique(id)), collapse = ",")) -> ab_merge_clone_subid
+
+ab_merge_clonefam <- dplyr::left_join(ab_merge_clonefam, ab_merge_clone_subid)
+# ab_merge_clonefam$p_cloneid <- paste(ab_merge_clonefam$patient, ab_merge_clonefam$clone_id, sep = "_")
+ab_merge_clonefam$clone_subid[is.na(ab_merge_clonefam$clone_subid)] <- ab_merge_clonefam$clone_id[is.na(ab_merge_clonefam$clone_subid)]
+ab_merge_clonefam$isotype_group <- substr(ab_merge_clonefam$isotype, 1, 4)
+
+# saveRDS(hbcab_map_clonefam, "~/talent/hbcab_map_clonefam.rds")
+# hbcab_map_clonefam <- readRDS("~/talent/hbcab_map_clonefam.rds")
+ab_merge_clonefam <- dplyr::left_join(ab_merge_clonefam, bcr_smrt_merge[, c("sequence_id",
+                                                                            "SpotLight_Anno", "TLS_maturity",
+                                                                            "TLS_raw", "CellSubType")])
+ab_merge_clonefam$TLS_maturity[is.na(ab_merge_clonefam$TLS_maturity)] <- ab_merge_clonefam$type[is.na(ab_merge_clonefam$TLS_maturity)]
+ab_merge_clonefam$SpotLight_Anno[is.na(ab_merge_clonefam$SpotLight_Anno)] <- ab_merge_clonefam$type[is.na(ab_merge_clonefam$SpotLight_Anno)]
+ab_merge_clonefam$TLS_raw[is.na(ab_merge_clonefam$TLS_raw)] <- ab_merge_clonefam$type[is.na(ab_merge_clonefam$TLS_raw)]
+
+# saveRDS(ab_merge_clonefam, "~/talent/ab_merge_clonefam.rds")
+# ab_merge_clonefam <- readRDS("~/talent/ab_merge_clone_v2.rds")
+ab_merge_clonefam <- dplyr::left_join(ab_merge_clonefam, bcr_smrt_merge[, c("sequence_id",
+                                                                            "Bin50", "Bin20")])
+# ab_merge_clonefam$Bin50[is.na(ab_merge_clonefam$Bin50)] <- ab_merge_clonefam$type[is.na(ab_merge_clonefam$Bin50)]
+saveRDS(ab_merge_clonefam, "~/ab_merge_clonefam_v2.rds")
+
+
+
+#### Figure 3A 2931T ####
+library(readxl)
+
+talent_result <- readRDS("~/ab_merge_clonefam_45_v2.rds")
+talent_result$mab_name <- ""
+outdir <- glue("~/A")
+if(!dir.exists(outdir)){
+  dir.create(outdir, recursive = T)
+}
+if_tls_contour = "T"
+cur_sample <- "2931T"
+all_clone <- talent_result$clone_subid[grepl("Ig", talent_result$id)] %>% unique()
+summary <- list()
+cell_summary <- list()
+# for (x in all_clone) {
+#   tmp_bcr_cloneid <- subset(talent_result, talent_result$clone_subid == x)
+#   mab_name <- tmp_bcr_cloneid$mab_name[grepl("Ig", unique(tmp_bcr_cloneid$mab_name))]
+#   mab_name <- paste(mab_name, collapse = ",")
+#   talent_result$mab_name[talent_result$clone_subid == x] <- mab_name
+# }
+
+t1 = talent_result[!is.na(Bin50)]
+tmp_bcr_cloneid <- t1[grepl("Ig", t1$clone_subid),]
+
+obj <- readRDS(glue('~/{cur_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds'))
+obj@meta.data <- read.table(glue("~/{cur_sample}.txt"), header = T) %>% as.data.frame()
+obj$BinID <- substr(obj$BinID, 7, nchar(obj$BinID))
+rownames(obj@meta.data) <- obj$BinID
+
+obj@meta.data$bin_id <- obj@meta.data[,1] 
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_capsule"] <- "Invasive_zone"
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_side_of_Margin_area"] <- "Tumor"
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Paratumor_side_of_Margin_area"] <- "Paratumor"
+obj@meta.data$TLS <- obj@meta.data$TLS_raw
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Conforming"] <- "conforming"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Deviating"] <- "deviating"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "NotMature"] <- "deviating"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Rare_Naive_GCB"] <- "STRH05B_NA"
+
+obj@meta.data[!obj@meta.data$TLS_maturity %in%  c("Mature", "deviating","conforming"), ]$TLS <- "STRH05B_NA"
+
+all_mab <- unique(tmp_bcr_cloneid$clone_subid)
+
+tmp_bcr_cloneid <- tmp_bcr_cloneid[tmp_bcr_cloneid$type == "smrt" & tmp_bcr_cloneid$sample == cur_sample ,]
+tmp_bcr_cloneid <- table(tmp_bcr_cloneid$Bin50, tmp_bcr_cloneid$clone_subid) %>% as.data.frame()
+colnames(tmp_bcr_cloneid) <- c("BinID", "mab_name", "clone")
+tmp_bcr_cloneid <- tmp_bcr_cloneid[tmp_bcr_cloneid$clone != 0,]
+tmp_bcr_cloneid <- dplyr::distinct(tmp_bcr_cloneid, BinID, .keep_all = T)
+# tmp_bcr_cloneid$BinID <- paste0(cur_sample, "_", tmp_bcr_cloneid$BinID)
+
+obj@meta.data <- dplyr::left_join(obj@meta.data, tmp_bcr_cloneid, by = "BinID") %>%
+  column_to_rownames(var="BinID")
+obj@meta.data$bin_id <- rownames(obj@meta.data)
+obj@meta.data$mab_name <- as.character(obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(is.na(obj@meta.data$mab_name), "other", obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$TLS != "STRH05B_NA" & obj@meta.data$mab_name == "other", "TLS", obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$mab_name == "other", obj@meta.data$Bin_Region, obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$mab_name %in% c("Tumor","Invasive_zone"), "Tumor", obj@meta.data$mab_name)
+
+# obj@meta.data$mab_name[obj@meta.data$mab_name %in% c("Ig_10", "Ig_14", "Ig_23", "Ig_30", "Ig_43", "Ig_5", "Ig_55", "Ig_67")] <- "anti-IFI30_antibody"
+# obj@meta.data$mab_name[obj@meta.data$mab_name %in% c("Ig_38","Ig_39","Ig_49","Ig_58","Ig_88")] <- "anti-TP53_antibody"
+
+# mab_color <- c("#E13B43", "#369945", "#1979A3", "#663D8F",  "#E0507D", "#EA7B25", "#40BCE4", "#EFA7B9", "#DB896C")
+# mab_color <-  c("#33a02c")
+# mab_color <-  c("#EE3743")
+mab_color <-  c("#EE3743", "#33a02c", "#0B7FAB", "#6a3d9a", "#ff7f00",  "#F6A9BD", "#fdbf6f", "#c51b7d",  
+                "#6F6C9E", "#01665e", "#a6cee3", "#b2df8a", "#ffff99", "#bf812d",  "#999999", "#BB7DB2", "#824615", "#ffff33", "#86DBD4",
+                "#BFE2E3","#A1CFFA","#78BDAD","#D45651","#397A7F","#F0918E","#EEE8DA","#1F5392","#A0BFAF",
+                "#AE98D6","#ECCBDC","#54BAD3","#8b4a4b","#DB896C","#AABAC2","#ffae3b",
+                '#CCCCCC','#B5B5B5','#A092C3','#DDA0DD','#03A4C6','#7AC5CD','#A3D9ED','#00E5EE','#F9EBDA','#F5DEB3',
+                '#98689E','#E84115','#FFB5C5','#00FF7F','#F9D01C','#B03060','#00ABDC','#D2691E','#03A464','#FF7F00',
+                '#8968CD','#1C5B75')
+# SpatialDimPython(obj = obj,
+#                  prefix = glue("{outdir}"),
+#                  plot_item = "mab_name",
+#                  plot_order = c("mAb41", "mAb42", "mAb32,mAb40", "mAb43", "mAb34",  "mAb35",  
+#                                 "mAb36",  "mAb39", "mAb33",      
+#                                  "TLS","Tumor","Paratumor"),
+# tmp_color = c(mab_color,"#9CCCE8", "#eaeaea","#EAD2DF"),
+#                  name = glue("merge_bin20"))
+obj$BinID = obj$bin_id
+table(obj$mab_name)
+unique(obj$mab_name)
+
+## 外扩一圈
+# df2 <- obj@meta.data[obj@meta.data$mab_name == "anti-TP53_antibody",]
+# for (i in c("Ig_88", "Ig_58", "Ig_39", "Ig_49", "Ig_38")){
+for (i in c("Ig_5", "Ig_10", "Ig_14", "Ig_23", "Ig_30", "Ig_43", "Ig_55", "Ig_67")){
+  
+  df2 <- obj@meta.data[obj@meta.data$mab_name %in% i,]
+  
+  df_location <- df2 %>%
+    dplyr::mutate(dplyr::across(c(col, row), as.numeric)) %>%
+    dplyr::distinct(row, col)
+  
+  df_expand <- df_location %>%
+    st_expand_n(
+      n = 1, 
+      x = "col", 
+      y = "row", 
+      expand_n = "expand_n", 
+      mode = 2
+    )
+  df_expand <- df_expand %>%
+    dplyr::select(col, row, TLS_center = group.by, distance = expand_n)
+  
+  
+  obj@meta.data <- obj@meta.data %>%
+    dplyr::mutate(dplyr::across(c(col, row), as.numeric)) %>%
+    dplyr::select(-dplyr::any_of(c("TLS_center", "distance"))) %>%
+    dplyr::left_join(df_expand, by = c("row", "col"))
+  
+  obj@meta.data$mab_name[obj@meta.data$distance %in% c("0", "1")] <- i
+}
+
+
+# cur_sample <- "RH05B"
+rownames(obj@meta.data) <- obj$bin_id
+
+
+## 2931T
+rownames(obj@meta.data) <- obj$bin_id
+SpatialDimPython(obj = obj,
+                 prefix = glue("{outdir}"),
+                 plot_item = "mab_name",
+                 plot_order = c("Ig_10", "Ig_14", "Ig_23",  "Ig_30", "Ig_43", "Ig_55", "Ig_67",
+                                "TLS", "Tumor_tissue"),
+                 tmp_color = c(mab_color[2:8],"#9CCCE8", "#eaeaea","#EAD2DF"),
+                 name = glue("{cur_sample}_cloneid_bin50"))
+
+
+
+#### Figure 3A 2837B ####
+library(readxl)
+
+talent_result <- readRDS("~/ab_merge_clonefam_45_v2.rds")
+talent_result$mab_name <- ""
+outdir <- glue("~/A")
+if(!dir.exists(outdir)){
+  dir.create(outdir, recursive = T)
+}
+if_tls_contour = "T"
+cur_sample <- "2837B"
+all_clone <- talent_result$clone_subid[grepl("Ig", talent_result$id)] %>% unique()
+summary <- list()
+cell_summary <- list()
+# for (x in all_clone) {
+#   tmp_bcr_cloneid <- subset(talent_result, talent_result$clone_subid == x)
+#   mab_name <- tmp_bcr_cloneid$mab_name[grepl("Ig", unique(tmp_bcr_cloneid$mab_name))]
+#   mab_name <- paste(mab_name, collapse = ",")
+#   talent_result$mab_name[talent_result$clone_subid == x] <- mab_name
+# }
+
+t1 = talent_result[!is.na(Bin50)]
+tmp_bcr_cloneid <- t1[grepl("Ig", t1$clone_subid),]
+
+obj <- readRDS(glue('~/{cur_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds'))
+obj@meta.data <- read.table(glue("~/{cur_sample}.txt"), header = T) %>% as.data.frame()
+obj$BinID <- substr(obj$BinID, 7, nchar(obj$BinID))
+rownames(obj@meta.data) <- obj$BinID
+
+obj@meta.data$bin_id <- obj@meta.data[,1] 
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_capsule"] <- "Invasive_zone"
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_side_of_Margin_area"] <- "Tumor"
+obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Paratumor_side_of_Margin_area"] <- "Paratumor"
+obj@meta.data$TLS <- obj@meta.data$TLS_raw
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Conforming"] <- "conforming"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Deviating"] <- "deviating"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "NotMature"] <- "deviating"
+obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Rare_Naive_GCB"] <- "STRH05B_NA"
+
+obj@meta.data[!obj@meta.data$TLS_maturity %in%  c("Mature", "deviating","conforming"), ]$TLS <- "STRH05B_NA"
+
+all_mab <- unique(tmp_bcr_cloneid$clone_subid)
+
+tmp_bcr_cloneid <- tmp_bcr_cloneid[tmp_bcr_cloneid$type == "smrt" & tmp_bcr_cloneid$sample == cur_sample ,]
+tmp_bcr_cloneid <- table(tmp_bcr_cloneid$Bin50, tmp_bcr_cloneid$clone_subid) %>% as.data.frame()
+colnames(tmp_bcr_cloneid) <- c("BinID", "mab_name", "clone")
+tmp_bcr_cloneid <- tmp_bcr_cloneid[tmp_bcr_cloneid$clone != 0,]
+tmp_bcr_cloneid <- dplyr::distinct(tmp_bcr_cloneid, BinID, .keep_all = T)
+# tmp_bcr_cloneid$BinID <- paste0(cur_sample, "_", tmp_bcr_cloneid$BinID)
+
+obj@meta.data <- dplyr::left_join(obj@meta.data, tmp_bcr_cloneid, by = "BinID") %>%
+  column_to_rownames(var="BinID")
+obj@meta.data$bin_id <- rownames(obj@meta.data)
+obj@meta.data$mab_name <- as.character(obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(is.na(obj@meta.data$mab_name), "other", obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$TLS != "STRH05B_NA" & obj@meta.data$mab_name == "other", "TLS", obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$mab_name == "other", obj@meta.data$Bin_Region, obj@meta.data$mab_name)
+obj@meta.data$mab_name <- ifelse(obj@meta.data$mab_name %in% c("Tumor","Invasive_zone"), "Tumor", obj@meta.data$mab_name)
+
+# obj@meta.data$mab_name[obj@meta.data$mab_name %in% c("Ig_10", "Ig_14", "Ig_23", "Ig_30", "Ig_43", "Ig_5", "Ig_55", "Ig_67")] <- "anti-IFI30_antibody"
+# obj@meta.data$mab_name[obj@meta.data$mab_name %in% c("Ig_38","Ig_39","Ig_49","Ig_58","Ig_88")] <- "anti-TP53_antibody"
+
+# mab_color <- c("#E13B43", "#369945", "#1979A3", "#663D8F",  "#E0507D", "#EA7B25", "#40BCE4", "#EFA7B9", "#DB896C")
+# mab_color <-  c("#33a02c")
+# mab_color <-  c("#EE3743")
+mab_color <-  c("#EE3743", "#33a02c", "#0B7FAB", "#6a3d9a", "#ff7f00",  "#F6A9BD", "#fdbf6f", "#c51b7d",  
+                "#6F6C9E", "#01665e", "#a6cee3", "#b2df8a", "#ffff99", "#bf812d",  "#999999", "#BB7DB2", "#824615", "#ffff33", "#86DBD4",
+                "#BFE2E3","#A1CFFA","#78BDAD","#D45651","#397A7F","#F0918E","#EEE8DA","#1F5392","#A0BFAF",
+                "#AE98D6","#ECCBDC","#54BAD3","#8b4a4b","#DB896C","#AABAC2","#ffae3b",
+                '#CCCCCC','#B5B5B5','#A092C3','#DDA0DD','#03A4C6','#7AC5CD','#A3D9ED','#00E5EE','#F9EBDA','#F5DEB3',
+                '#98689E','#E84115','#FFB5C5','#00FF7F','#F9D01C','#B03060','#00ABDC','#D2691E','#03A464','#FF7F00',
+                '#8968CD','#1C5B75')
+# SpatialDimPython(obj = obj,
+#                  prefix = glue("{outdir}"),
+#                  plot_item = "mab_name",
+#                  plot_order = c("mAb41", "mAb42", "mAb32,mAb40", "mAb43", "mAb34",  "mAb35",  
+#                                 "mAb36",  "mAb39", "mAb33",      
+#                                  "TLS","Tumor","Paratumor"),
+# tmp_color = c(mab_color,"#9CCCE8", "#eaeaea","#EAD2DF"),
+#                  name = glue("merge_bin20"))
+obj$BinID = obj$bin_id
+table(obj$mab_name)
+unique(obj$mab_name)
+
+## 外扩一圈
+# df2 <- obj@meta.data[obj@meta.data$mab_name == "anti-TP53_antibody",]
+for (i in c("Ig_88", "Ig_58", "Ig_39", "Ig_49", "Ig_38")){
+  # for (i in c("Ig_5", "Ig_10", "Ig_14", "Ig_23", "Ig_30", "Ig_43", "Ig_55", "Ig_67")){
+  
+  df2 <- obj@meta.data[obj@meta.data$mab_name %in% i,]
+  
+  df_location <- df2 %>%
+    dplyr::mutate(dplyr::across(c(col, row), as.numeric)) %>%
+    dplyr::distinct(row, col)
+  
+  df_expand <- df_location %>%
+    st_expand_n(
+      n = 1, 
+      x = "col", 
+      y = "row", 
+      expand_n = "expand_n", 
+      mode = 2
+    )
+  df_expand <- df_expand %>%
+    dplyr::select(col, row, TLS_center = group.by, distance = expand_n)
+  
+  
+  obj@meta.data <- obj@meta.data %>%
+    dplyr::mutate(dplyr::across(c(col, row), as.numeric)) %>%
+    dplyr::select(-dplyr::any_of(c("TLS_center", "distance"))) %>%
+    dplyr::left_join(df_expand, by = c("row", "col"))
+  
+  obj@meta.data$mab_name[obj@meta.data$distance %in% c("0", "1")] <- i
+}
+
+
+rownames(obj@meta.data) <- obj$bin_id
+
+## 2837B
+rownames(obj@meta.data) <- obj$bin_id
+SpatialDimPython(obj = obj,
+                 prefix = glue("{outdir}"),
+                 plot_item = "mab_name",
+                 plot_order = c( "Ig_39", "Ig_49", "Ig_58",
+                                 "TLS", "Tumor_tissue"),
+
+                 tmp_color = c(mab_color[2:4],"#9CCCE8", "#eaeaea","#EAD2DF"),
+                 name = glue("{cur_sample}_cloneid_bin50"))
+
+
+#### Figure 3C ====
+bcr_smrt_merge <- readRDS("~/45sample_bcr0626.rds")
+changeo_merge <- readRDS("~/changeo/merge4.rds")
+
+
+
+use_id <- fread("~/use_id.txt")
+
+for(cur_tls in unique(use_id$tls)){
+  cur_sample <- substr(cur_tls, 3, 7)
+  outdir <- glue("~/tree_plot/{cur_tls}")
+  dir.create(outdir, recursive = T)
+  ab_result <- readRDS("~/ab_merge_clonefam_v2.rds")
+  ab_result$mab_name <- ""
+  ab_result$mab_name[grepl("Ig", ab_result$clone_subid)] <- ab_result$clone_subid[grepl("Ig", ab_result$clone_subid)]
+  # ab_result$mab_name[grepl("ifi30", ab_result$clone_subid)] <- "ifi30"
+  ab_result$mab_name[grepl(cur_sample, ab_result$clone_subid)] <- "other_ig"
+  ab_result <- ab_result[ab_result$mab_name != ""]
+  all_clone <- ab_result$clone_id[!grepl("other_ig", ab_result$mab_name)] %>% unique()
+  for (x in all_clone) {
+    tmp_bcr_cloneid <- subset(ab_result, ab_result$clone_id == x)
+    mab_name <- tmp_bcr_cloneid$clone_subid[!grepl("other_ig", unique(tmp_bcr_cloneid$mab_name))] %>% unique()
+    mab_name <- paste(mab_name, collapse = ",")
+    ab_result$mab_name[ab_result$clone_id == x] <- mab_name
+  }
+  
+  for(ID in use_id$id[use_id$tls == cur_tls]){
+    test_graph_df <- fread(glue('~/tree_plot/{cur_tls}/{ID}_graph_df.txt'))
+    test_graph_df$sequence_id <- gsub("seqID_", "", test_graph_df$to)
+    
+    cur_all_seq_df <- test_graph_df %>% tidyr::separate_rows(sequence_merge, sep = ",")
+    cur_all_seq_df$sequence_merge <- gsub("seqID_", "", cur_all_seq_df$sequence_merge )
+    cur_all_seq_df <- cur_all_seq_df[!grepl("Germline", cur_all_seq_df$sequence_merge),]
+    cur_all_seq_df <- cur_all_seq_df[!grepl("Inferred", cur_all_seq_df$sequence_merge),]
+    cur_all_seq_df <- as.data.frame(cur_all_seq_df)
+    cur_all_seq_df$label <- str_replace_all(cur_all_seq_df$label, "\\|", "_")
+    cur_changeo <- changeo_merge[changeo_merge$sequence_id %in% cur_all_seq_df$sequence_merge, ]
+    cur_changeo <- cur_changeo  %>% 
+      dplyr::left_join(bcr_smrt_merge[, c("sequence_id",
+                                          "SpotLight_Anno", "CellSubType", "TLS_maturity",
+                                          "TLS_raw", "Bin50", "Bin20")]) %>% 
+      dplyr::left_join(cur_all_seq_df[, c("sequence_merge",
+                                          "steps", "distance",
+                                          "order", "weight", "label")], by = c("sequence_id" = "sequence_merge"))
+    cur_changeo_smrt <- cur_changeo[cur_changeo$type == "Spatial",]
+    
+    obj <- readRDS(glue('~/{cur_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds'))
+    obj@meta.data <-read.table(glue("~/{cur_sample}.txt"),
+                               sep = "\t",
+                               header = T,
+                               row.names = 1) %>% as.data.frame()
+    obj@meta.data$bin_id <- rownames(obj@meta.data)
+    obj@meta.data$TLS_maturity[is.na(obj@meta.data$TLS_maturity)] <- glue("ST{cur_sample}_NA")
+    obj@meta.data$TLS_raw[is.na(obj@meta.data$TLS_raw)] <- glue("ST{cur_sample}_NA")
+    obj@meta.data$Bin_Region[is.na(obj@meta.data$Bin_Region)] <- "None"
+    obj@meta.data$CellSubType[is.na(obj@meta.data$CellSubType)] <- "None"
+    obj@meta.data$CellSubType[is.na(obj@meta.data$CellSubType)] <- "None"
+    
+    # obj@meta.data$bin_id <- obj@meta.data[,1] 
+    obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_capsule"] <- "Invasive_zone"
+    obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Tumor_side_of_Margin_area"] <- "Tumor"
+    obj@meta.data$Bin_Region[obj@meta.data$Bin_Region == "Paratumor_side_of_Margin_area"] <- "Paratumor"
+    obj@meta.data$TLS <- obj@meta.data$TLS_raw
+    obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Conforming"] <- "conforming"
+    obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Deviating"] <- "deviating"
+    obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "NotMature"] <- "deviating"
+    obj@meta.data$TLS_maturity[obj@meta.data$TLS_maturity == "Rare_Naive_GCB"] <- glue("ST{cur_sample}_NA")
+    obj@meta.data$TLS_maturity[is.na(obj@meta.data$TLS_maturity)] <- glue("ST{cur_sample}_NA")
+    
+    obj@meta.data[!obj@meta.data$TLS_maturity %in%  c("Mature", "deviating","conforming"), ]$TLS_raw <- glue("ST{cur_sample}_NA")
+    
+    
+    obj@meta.data$TLS_raw[obj@meta.data$TLS_maturity == glue("ST{cur_sample}_NA")] <- glue("ST{cur_sample}_NA")
+    obj@meta.data$TLS_maturity[obj@meta.data$TLS_raw == glue("ST{cur_sample}_NA")] <- glue("ST{cur_sample}_NA")
+    cur_meta <- obj@meta.data
+    
+    
+    
+    cur_mab <- cur_all_seq_df$c_call[!grepl("G1", cur_all_seq_df$c_call)]%>% unique()
+    
+    tmp_bcr_cloneid <- cur_changeo
+    tmp_bcr_cloneid <- tmp_bcr_cloneid[tmp_bcr_cloneid$type == "Spatial",] %>% dplyr::arrange(desc(order))
+    
+    tmp_bcr_cloneid_tab <- tmp_bcr_cloneid$Bin50 %>% table() %>% as.data.frame()
+    colnames(tmp_bcr_cloneid_tab) <- c("bin_id","clone")
+    tmp_bcr_cloneid_tab <- tmp_bcr_cloneid_tab %>%
+      dplyr::left_join(tmp_bcr_cloneid[, c("Bin50", "order", "weight", "label")], by = c("bin_id" = "Bin50"))
+    node_count_tab <- tmp_bcr_cloneid_tab %>%
+      dplyr::distinct(bin_id, order, .keep_all = T) %>%
+      as.data.frame() %>%
+      dplyr::group_by(bin_id, order) %>%
+      dplyr::summarise(count = n()) %>%
+      as.data.frame()
+    if(any(node_count_tab$count > 1)){
+      print(cur_mab)
+    }
+    tmp_bcr_cloneid_tab <- dplyr::distinct(tmp_bcr_cloneid_tab, bin_id, .keep_all = T)
+    seq_bin <- tmp_bcr_cloneid_tab$bin_id
+    
+    cur_obj <- obj
+    
+    cur_obj@meta.data <- dplyr::left_join(cur_obj@meta.data, tmp_bcr_cloneid_tab, by = "bin_id")
+    cur_obj@meta.data$clone <- ifelse(is.na(cur_obj@meta.data$clone), "other", "other_ig")
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$TLS != glue("ST{cur_sample}_NA") & cur_obj@meta.data$clone == "other", "TLS", cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "other", cur_obj@meta.data$Bin_Region, cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone %in% c("Tumor", "Invasive_zone"), "Tumor", cur_obj@meta.data$clone)
+    # b_naive_bin <- cur_obj@meta.data$bin_id[cur_obj@meta.data$TLS_raw == cur_tls& cur_obj@meta.data$celltype == "NaiveB"]
+    gcb_bin <- cur_obj@meta.data$bin_id[cur_obj@meta.data$TLS_raw == cur_tls& cur_obj@meta.data$CellSubType == "GCB"]
+    # cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "TLS" & cur_obj@meta.data$bin_id %in% b_naive_bin, "NaiveB", cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "TLS" & cur_obj@meta.data$bin_id %in% gcb_bin, "GCB", cur_obj@meta.data$clone)
+    
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "other_ig" & cur_obj@meta.data$bin_id %in% seq_bin, cur_obj@meta.data$label, cur_obj@meta.data$clone)
+    
+    
+    all_label <- unique(cur_obj@meta.data$label)
+    all_label <- all_label[!is.na(all_label)] %>% sort()
+    cur_mab_seq <- cur_changeo_smrt$sequence_id[!grepl(cur_sample, cur_changeo_smrt$label)]
+    cur_mab_clone <- bcr_smrt_merge$clone_id[bcr_smrt_merge$sequence_id %in% cur_mab_seq]
+    
+    cur_mab_clone_bin <- bcr_smrt_merge[bcr_smrt_merge$clone_id %in% cur_mab_clone & bcr_smrt_merge$sample == cur_sample,]$Bin50
+    cur_obj@meta.data$clone <- ifelse((!cur_obj@meta.data$clone %in%  all_label) & cur_obj@meta.data$bin_id %in% cur_mab_clone_bin,
+                                      cur_mab, cur_obj@meta.data$clone)
+    
+    rownames(cur_obj@meta.data) <- cur_obj$bin_id
+    
+    label_col <- rep("#A2C4CF", length(all_label))
+    label_col[which(grepl("Ig", all_label))] <- "#3A8339"
+    
+    SpatialDimPython(obj = cur_obj,
+                     prefix = glue("{outdir}/"),
+                     plot_item = "clone",
+                     plot_order = c(all_label, cur_mab,"GCB", "TLS","Tumor","Paratumor", "None"),
+                     tmp_color = c(label_col, "#3A8339", "black","#00ABDC", "#eaeaea","#EAD2DF", "white"),
+                     name = glue("{ID}_spatial_all"))
+    
+    
+    
+    cur_obj <- obj
+    
+    cur_obj@meta.data <- dplyr::left_join(cur_obj@meta.data, tmp_bcr_cloneid_tab, by = "bin_id")
+    cur_obj@meta.data$clone <- ifelse(is.na(cur_obj@meta.data$clone), "other", "other_ig")
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$TLS != glue("ST{cur_sample}_NA") & cur_obj@meta.data$clone == "other", "TLS", cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "other", cur_obj@meta.data$Bin_Region, cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone %in% c("Tumor", "Invasive_zone"), "Tumor", cur_obj@meta.data$clone)
+    # b_naive_bin <- cur_obj@meta.data$bin_id[cur_obj@meta.data$TLS_raw == cur_tls& cur_obj@meta.data$celltype == "NaiveB"]
+    gcb_bin <- cur_obj@meta.data$bin_id[cur_obj@meta.data$TLS_raw == cur_tls& cur_obj@meta.data$CellSubType == "GCB"]
+    # cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "TLS" & cur_obj@meta.data$bin_id %in% b_naive_bin, "NaiveB", cur_obj@meta.data$clone)
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "TLS" & cur_obj@meta.data$bin_id %in% gcb_bin, "GCB", cur_obj@meta.data$clone)
+    
+    cur_obj@meta.data$clone <- ifelse(cur_obj@meta.data$clone == "other_ig" & cur_obj@meta.data$bin_id %in% seq_bin, cur_obj@meta.data$order, cur_obj@meta.data$clone)
+    
+    rownames(cur_obj@meta.data) <- cur_obj$bin_id
+    all_order <- unique(cur_obj@meta.data$order)
+    all_order <- all_order[!is.na(all_order)] %>% sort()
+    
+    SpatialDimPython(obj = subset(cur_obj, TLS_raw == cur_tls & clone %in% c(all_order,"GCB",  "TLS")),
+                     prefix = glue("{outdir}/"),
+                     plot_item = "clone",
+                     plot_order = c(all_order, "GCB",  "TLS"),
+                     tmp_color = c(mycolor_merge[1:length(all_order)],"black", "#eaeaea"),
+                     name = glue("{ID}_tls"))
+    
+    
+    SpatialDimPython(obj = cur_obj,
+                     prefix = glue("{outdir}/"),
+                     plot_item = "clone",
+                     plot_order = c(all_order, "GCB", "TLS","Tumor","Paratumor", "None"),
+                     tmp_color = c(mycolor_merge[1:length(all_order)],"black", "#00ABDC", "#eaeaea","#EAD2DF", "white"),
+                     name = glue("{ID}_spatial"))
+    
+    
+    tls_obj <- subset(cur_obj, TLS_raw == cur_tls)
+    tls_x_min <- tls_obj$row %>% min() - 10
+    tls_y_min <- tls_obj$col %>% min() - 10
+    tls_x_max <- tls_obj$row %>% max() + 10
+    tls_y_max <- tls_obj$col %>% max() + 10
+    tls_expand <- subset(cur_obj, row %in% c(tls_x_min:tls_x_max) & col %in% c(tls_y_min:tls_y_max))
+    
+    all_mab_bin <- ab_result$Bin50[ab_result$mab_name == cur_mab]
+    all_mab_bin <- all_mab_bin[!is.na(all_mab_bin)]
+    
+    tls_expand@meta.data$clone <- ifelse(tls_expand@meta.data$clone == 'TLS'& tls_expand@meta.data$TLS_raw != cur_tls, tls_expand@meta.data$Bin_Region, tls_expand@meta.data$clone)
+    
+    tls_expand@meta.data$clone <- ifelse(tls_expand@meta.data$clone %in% c("Tumor", "Invasive_zone", 'Paratumor', 'TLS') & tls_expand@meta.data$bin_id %in% all_mab_bin, cur_mab, tls_expand@meta.data$clone)
+    
+    tls_expand@meta.data$clone <- ifelse(tls_expand@meta.data$clone %in% all_order, tls_expand@meta.data$label, tls_expand@meta.data$clone)
+    
+    all_label <- tls_expand@meta.data$label %>% unique()
+    all_label <- all_label[!is.na(all_label)]
+    
+    label_col <- rep("#A2C4CF", length(all_label))
+    label_col[which(grepl("Ig", all_label))] <- "#3A8339"
+    # c_plot_order <- c(tls_expand@meta.data$label %>% unique(), cur_mab, "GCB",  "TLS", "Tumor")
+    
+    
+    SpatialDimPython(obj = tls_expand,
+                     prefix = glue("{outdir}/"),
+                     plot_item = "clone",
+                     plot_order = c(all_label, cur_mab, "GCB",  "TLS", "Tumor", "Paratumor", "Invasive_zone"),
+                     tmp_color = c(label_col, "#3A8339", "black", "#eaeaea", "white", "white", "white"),
+                     name = glue("{ID}_tls_expand"))
+    
+    
+  }
+  
+}
+
+
+
+
+
+
+### check tree cell type====
+source("~/expand_n_layer.R")
+merge_bcr <- readRDS("~/merged_bcr.rds")
+merge_bcr_rh05b <- merge_bcr[merge_bcr$sample == "RH05B",]
+cur_sample <- "RH05B"
+hcc_st <- readRDS(glue('~/{cur_sample}_scRefST2934T_random100_marker20_spotlight_Spatial.rds'))
+hcc_st@meta.data <-read.table(glue("~/{cur_sample}.txt"),
+                              sep = "\t",
+                              header = T,
+                              row.names = 1) %>% as.data.frame()
+rownames(hcc_st@meta.data) <- str_replace(rownames(hcc_st@meta.data), "\\w{5}_", "")
+hcc_st@meta.data$SpotLight_Anno[is.na(hcc_st@meta.data$SpotLight_Anno)] <- "None"
+hcc_st@meta.data$CellSubType[is.na(hcc_st@meta.data$CellSubType)] <- "None"
+hcc_st@meta.data$SpotLight_Anno[hcc_st@meta.data$SpotLight_Anno == "pDC"] <- "Myeloid"
+hcc_st$BinID <- rownames(hcc_st@meta.data)
+
+meta_data <- hcc_st@meta.data
+meta_data$bin50 <- paste(meta_data$SampleID, meta_data$BinID, sep = "_")
+meta_data$tree_label <- ""
+
+## tree STRH05B_10_1072
+tree_df <- fread("~/tree_plot/STRH05B_10/STRH05B_10_1072_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 3]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
   )
-save_plot(p, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_accuracy"),
-          width = 5, height = 5, if_png = TRUE)
+cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 
-#### 共享和 acc的关系 ====
-
-summary_shared <- read_xlsx("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
-plot_df <- summary_shared[summary_shared$bin_size %in% c(20, 50, 110) & summary_shared$clone_size == 1, ]
-quantile(plot_df$n_Shared_Allelic_Predict[plot_df$bin_size == 20])
-
-plot_df <- plot_df %>%
-  mutate(group = case_when(
-    n_Shared_Allelic_Predict >= 16 ~ ">=16",
-    n_Shared_Allelic_Predict >= 10 ~ ">=10",
-    n_Shared_Allelic_Predict >= 6  ~ ">=6",
-    n_Shared_Allelic_Predict >= 3  ~ ">=3",
-    TRUE ~ ">=1"
-  )) %>%
-  arrange(factor(group, levels = c(">=1",  ">=3", ">=6", ">=10", ">=16")))
-
-df_levels <- bind_rows(
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 1)  %>% mutate(group = ">=1"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 3)  %>% mutate(group = ">=3"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 6)  %>% mutate(group = ">=6"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 10)  %>% mutate(group = ">=10"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 16) %>% mutate(group = ">=16")
-)
-
-
-df_levels <- df_levels[df_levels$clone_size == 1,]
-group_stats <- df_levels %>%
-  group_by(bin_size, group) %>%
-  summarise(n_sample = n(), .groups = "drop") %>%
-  arrange(bin_size, factor(group, levels = c(">=1",  ">=3", ">=6", ">=10", ">=16")))
-group_stats
-
-p_line <- ggline(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                 add = c("mean_se"), 
-                 facet.by = "bin_size") +
-  labs(x = "n_shared", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_line"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_line"),
-          width = 10, height = 5, if_png = TRUE)
-
-p_box <- ggboxplot(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                 facet.by = "bin_size") +
-  labs(x = "n_shared", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_box"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_box"),
-          width = 10, height = 5, if_png = TRUE)
-
-#### 共享和 acc的关系 v2====
-
-summary_shared <- read_xlsx("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
-plot_df <- summary_shared[summary_shared$bin_size %in% c(20, 50, 110) & summary_shared$clone_size == 1, ]
-quantile(plot_df$n_Shared_Allelic_Predict[plot_df$bin_size == 20])
-
-# plot_df <- plot_df %>%
-#   mutate(group = case_when(
-#     n_Shared_Allelic_Predict >= 16 ~ ">=16",
-#     n_Shared_Allelic_Predict >= 10 ~ ">=10",
-#     n_Shared_Allelic_Predict >= 6  ~ ">=6",
-#     n_Shared_Allelic_Predict >= 3  ~ ">=3",
-#     n_Shared_Allelic_Predict >= 1  ~ ">=1"
-#   )) %>%
-#   arrange(factor(group, levels = c(">=1",  ">=3", ">=6", ">=10", ">=16")))
-
-df_levels <- bind_rows(
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 1 & n_Shared_Allelic_Predict < 3)  %>%
-    mutate(group = "1-2"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 3 & n_Shared_Allelic_Predict < 6)  %>%
-    mutate(group = "3-5"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 6 & n_Shared_Allelic_Predict < 10)  %>%
-    mutate(group = "6-9"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 10 & n_Shared_Allelic_Predict < 16)  %>% 
-    mutate(group = "10-15"),
-  plot_df %>% filter(n_Shared_Allelic_Predict >= 16) %>% 
-    mutate(group = "16-")
-)
-df_levels$group <- factor(df_levels$group, levels = c("1-2",  "3-5", "6-9", "10-15", "16-"))
-
-df_levels <- df_levels[df_levels$clone_size == 1,]
-group_stats <- df_levels %>%
-  group_by(bin_size, group) %>%
-  summarise(n_sample = n(), .groups = "drop") %>%
-  arrange(bin_size, factor(group, levels = c("1-2",  "3-5", "6-9", "10-15", "16-")))
-group_stats
-
-p_line <- ggline(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                 add = c("mean_se"), 
-                 facet.by = "bin_size") +
-  labs(x = "n_shared", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_line_v2"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_line_v2"),
-          width = 10, height = 5, if_png = TRUE)
-
-p_box <- ggboxplot(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                   facet.by = "bin_size") +
-  labs(x = "n_shared", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_box_v2"),
-          width = 10, height = 5, if_pdf = TRUE)
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/n_shared_acc_box_v2"),
-          width = 10, height = 5, if_png = TRUE)
+## tree STRH05B_21_1275
+tree_df <- fread("~/tree_plot/STRH05B_21/STRH05B_21_1275_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 3]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 
 
-####  UMI per Bin50 spot 和 acc的关系 ====
-
-summary_shared <- read_xlsx("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
-plot_df <- summary_shared[summary_shared$bin_size %in% c(50) & summary_shared$clone_size == 1, ]
-quantile(plot_df$UMI_count_per_Bin50)
-umi_group <- quantile(plot_df$UMI_count_per_Bin50)
-plot_df <- plot_df %>%
-  mutate(group = case_when(
-    UMI_count_per_Bin50 >= 20 ~ ">=20",
-    UMI_count_per_Bin50 >= 13  ~ ">=13",
-    UMI_count_per_Bin50 >= 8  ~ ">=8",
-    TRUE ~ ">=2"
-  )) %>%
-  arrange(factor(group, levels = c(">=2",  ">=8", ">=13", ">=20")))
-
-df_levels <- bind_rows(
-  plot_df %>% filter(UMI_count_per_Bin50 >= 2)  %>% mutate(group = ">=2"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 8)  %>% mutate(group = ">=8"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 13)  %>% mutate(group = ">=13"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 20)  %>% mutate(group = ">=20")
-)
-
-df_levels <- df_levels[df_levels$clone_size == 1,]
-group_stats <- df_levels %>%
-  group_by(bin_size, group) %>%
-  summarise(n_sample = n(), .groups = "drop") %>%
-  arrange(bin_size, factor(group, levels = c(">=2",  ">=8", ">=13", ">=20")))
-group_stats
-
-p_line <- ggline(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                 add = c("mean_se")) +
-  labs(x = "UMI_count_per_Bin50", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_line"),
-          width = 4, height = 4, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_line"),
-          width = 4, height = 4, if_png = TRUE)
-
-p_box <- ggboxplot(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060") +
-  labs(x = "UMI_count_per_Bin50", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_box"),
-          width = 4, height = 4, if_pdf = TRUE)
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_box"),
-          width = 4, height = 4, if_png = TRUE)
+cur_seq <- tree_df$sequence_merge[tree_df$order == 4]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 
 
 
-####  UMI per Bin50 spot 和 acc的关系 v2====
+## tree STRH05B_12_1173 ====
+tree_df <- fread("~/tree_plot/STRH05B_12/STRH05B_12_1173_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 3]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
 
-summary_shared <- read_xlsx("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
-plot_df <- summary_shared[summary_shared$bin_size %in% c(50) & summary_shared$clone_size == 1, ]
-quantile(plot_df$UMI_count_per_Bin50)
-umi_group <- quantile(plot_df$UMI_count_per_Bin50)
-# plot_df <- plot_df %>%
-#   mutate(group = case_when(
-#     UMI_count_per_Bin50 >= 20 ~ ">=20",
-#     UMI_count_per_Bin50 >= 13  ~ ">=13",
-#     UMI_count_per_Bin50 >= 8  ~ ">=8",
-#     TRUE ~ ">=2"
-#   )) %>%
-#   arrange(factor(group, levels = c(">=2",  ">=8", ">=13", ">=20")))
-
-df_levels <- bind_rows(
-  plot_df %>% filter(UMI_count_per_Bin50 >= 2 & UMI_count_per_Bin50 < 8)  %>% mutate(group = "2-8"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 8 & UMI_count_per_Bin50 < 13)  %>% mutate(group = "8-13"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 13 & UMI_count_per_Bin50 < 20)  %>% mutate(group = "13-20"),
-  plot_df %>% filter(UMI_count_per_Bin50 >= 20)  %>% mutate(group = ">=20")
-)
-
-df_levels <- df_levels[df_levels$clone_size == 1,]
-group_stats <- df_levels %>%
-  group_by(bin_size, group) %>%
-  summarise(n_sample = n(), .groups = "drop") %>%
-  arrange(bin_size, factor(group, levels = c("2-8", "8-13", "13-20", ">=20")))
-group_stats
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 
 
-wilcox.test(df_levels$allelic_accuracy[df_levels$group %in% c("2-8","8-13" )], 
-              df_levels$allelic_accuracy[df_levels$group %in% c("13-20",">=20" )])
-t.test(df_levels$allelic_accuracy[df_levels$group %in% c("2-8","8-13" )], 
-            df_levels$allelic_accuracy[df_levels$group %in% c("13-20",">=20" )])
-wilcox.test(df_levels$allelic_accuracy[df_levels$group == "8-13"],
-            df_levels$allelic_accuracy[df_levels$group == "13-20"])
-
-wilcox.test(df_levels$allelic_accuracy[df_levels$group == "13-20"],
-            df_levels$allelic_accuracy[df_levels$group == ">=20"])
-
-pairwise_result <- pairwise.wilcox.test(
-  df_levels$allelic_accuracy, 
-  df_levels$group,
-  p.adjust.method = "BH"   # Benjamini-Hochberg 校正
-)
-pairwise_result
-
-
-p_line <- ggline(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060",
-                 add = c("mean_se")) +
-  labs(x = "UMI_count_per_Bin50", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_line_v2"),
-          width = 5, height = 5, if_pdf = TRUE)
-save_plot(p_line, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_line_v2"),
-          width = 5, height = 5, if_png = TRUE)
-
-p_box <- ggboxplot(df_levels, x = "group", y = "allelic_accuracy", color = "#B03060") +
-  labs(x = "UMI_count_per_Bin50", y = "allelic_accuracy") +
-  theme(plot.title = element_text(size = 20, color = "black", face = "bold", hjust = 0.5))
-
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_box_v2"),
-          width = 4, height = 4, if_pdf = TRUE)
-save_plot(p_box, glue("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/umi_acc_box_v2"),
-          width = 4, height = 4, if_png = TRUE)
-
-
-library(ggpubr)
-
-ggboxplot(df_levels, x = "group", y = "allelic_accuracy", fill = "group") +
-  stat_compare_means(method = "wilcox.test", 
-                     comparisons = list(c("2-8", "8-13"),
-                                        c("2-8", "13-20"),
-                                        c("2-8", ">=20"),
-                                        c("8-13", "13-20"),
-                                        c("8-13", ">=20"),
-                                        c("13-20", ">=20")),
-                     label = "p.signif") +
-  theme_minimal()
-
-
-anova_model <- aov(allelic_accuracy ~ group, data = df_levels)
-
-# ANOVA 结果
-summary(anova_model)
-TukeyHSD(anova_model)
+cur_seq <- tree_df$sequence_merge[tree_df$order == 4]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 
 
 
-#### 给李斌师兄的数据 =====
-summary_shared <- read_xlsx("/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/summary_shared.xlsx")
 
-df_summary <- bind_rows(
-  summary_shared %>% filter(UMI_count_per_Bin50 >= 2 & UMI_count_per_Bin50 < 8)  %>% mutate(umi_group = "2-8"),
-  summary_shared %>% filter(UMI_count_per_Bin50 >= 8 & UMI_count_per_Bin50 < 13)  %>% mutate(umi_group = "8-13"),
-  summary_shared %>% filter(UMI_count_per_Bin50 >= 13 & UMI_count_per_Bin50 < 20)  %>% mutate(umi_group = "13-20"),
-  summary_shared %>% filter(UMI_count_per_Bin50 >= 20)  %>% mutate(umi_group = ">=20")
-)
-df_summary <- df_summary[, c("newID", "clone_size", "bin_size", "umi_group", "allelic_accuracy")] %>% 
-  dplyr::rename(accuracy = allelic_accuracy)
-library(openxlsx)
-write.xlsx(df_summary, 
-           file = "/Users/mac/Desktop/Rproject/Pacbio/文章/结果图/Fig2/Fig2-CDE/31个样本准确性.xlsx")
+## tree STRH05B_9_1072 ====
+tree_df <- fread("~/tree_plot/STRH05B_9/STRH05B_9_1072_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 6]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
 
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 8]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+## tree STRH05B_4_1173 ====
+tree_df <- fread("~/tree_plot/STRH05B_4/STRH05B_4_1173_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 3]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 4]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 5]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+## tree STRH05B_7_902 ====
+tree_df <- fread("~/tree_plot/STRH05B_7/STRH05B_7_902_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 4]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 5]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 5]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+
+## tree STRH05B_7_1173 ====
+tree_df <- fread("~/tree_plot/STRH05B_7/STRH05B_7_1173_graph_df.txt")
+tree_df <- tidyr::separate_rows(tree_df, sequence_merge, sep = ",")
+cur_seq <- tree_df$sequence_merge[tree_df$order == 3]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
+
+
+cur_seq <- tree_df$sequence_merge[tree_df$order == 4]
+cur_bin50 <- merge_bcr_rh05b$bin_id[merge_bcr_rh05b$sequence_id %in% cur_seq]
+cur_cell_list <- meta_data$SpotLight_Anno[meta_data$bin50 %in% cur_bin50]
+cur_cell_list %>% unique()
+meta_data$tree_label <- ""
+meta_data$tree_label[meta_data$bin50 %in% cur_bin50] <- "tree"
+meta_data_e1 <-   meta_data %>%
+  dplyr::filter(tree_label == "tree") %>% 
+  st_expand_n(
+    n = 1, 
+    x = "col", 
+    y = "row", 
+    expand_n = "expand_n", 
+    group.by = "tree_label", 
+    mode = 2
+  )
+# cur_cell_sub_e <- meta_data$CellSubType[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+# cur_cell_sub_e %>% unique()
+cur_cell_list_e <- meta_data$SpotLight_Anno[meta_data$row %in% meta_data_e1$row & meta_data$col %in% meta_data_e1$col]
+cur_cell_list_e %>% unique()
 

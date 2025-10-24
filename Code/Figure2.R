@@ -1,3 +1,5 @@
+#### Figure 2E ====
+
 accuracy_results <- list()
 allelic_summary <- fread(glue('/Users/mac/Desktop/Rproject/findlight/version5/final_version/summary_e100.tsv')) %>% as.data.frame()
 allelic_summary$repair_accuracy <- NA
@@ -42,8 +44,8 @@ df_repair$method <- "repair"
 
 combined_df <- rbind(df_allelic, df_repair)
 
-for (bin in unique(combined_df$bin_size)) {
-  for (thresh in unique(combined_df$threshold)) {
+for (bin in c(20, 50, 110)) {
+  for (thresh in 1) {
     subset_df <- combined_df[combined_df$bin_size == bin & combined_df$threshold == thresh, ]
     acc_allelic <- subset_df$value[subset_df$method == "allelic"]
     acc_repair <- subset_df$value[subset_df$method == "repair"]
@@ -64,6 +66,7 @@ bin <- 110; thresh <- 1;
 subset_df <- combined_df[combined_df$bin_size == bin & combined_df$threshold == thresh, ]
 dplyr::group_by(subset_df, method) %>% dplyr::summarise(mean = mean(value))
 
+#### Figure 2F ====
 
 # Line Plot for Accuracies across Thresholds
 plot_df <- combined_df[combined_df$bin_size %in% c(20, 50, 110), ]
