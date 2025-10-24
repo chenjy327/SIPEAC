@@ -1,3 +1,592 @@
+#### prepare data =====
+pacbio_sc_info <- fread("~/Pacbio_SingleCell.csv")
+sample_dir <- pacbio_sc_info$SC_Path
+names(sample_dir) <- pacbio_sc_info$SampleID
+sample_list <- lapply(sample_dir, function(x){
+  x <- strsplit(x, ";")[[1]]
+  s_l <- c()
+  for(x1 in x){
+    x2 <- strsplit(x1, "\\/")[[1]]
+    s_l <- c(s_l, x2[length(x2)])
+  }
+  return(s_l)
+})
+
+changeo_out <- readRDS("~/merge4.rds")
+chain_share <- changeo_out[changeo_out$type_shared_main == "Shared",]
+chain_share_h <- chain_share[chain_share$locus == "IGH",]
+chain_share_h_st <- chain_share_h[chain_share_h$type == "Spatial",]
+select_sample <- chain_share_h_st$sample %>% unique()
+# binsize_list <- c(20, 50, 110)
+binsize_list <- c(20, 50, 110)
+thre_list <- read.table("~/threshold_0/threshold.txt", header = F)
+# thre_list <- thre_list$V1
+thre_list <- c(1)
+share_sample <- c()
+
+for(cur_sample in select_sample){
+  for(bin_size in binsize_list){
+    cur_sample_new <- glue("{cur_sample}_Spatial")
+    cur_sample_list <- sample_list[[cur_sample]]
+    idx <- c()
+    for(cs in cur_sample_list){
+      cs_1 <- chain_share$sample_new[chain_share$sample == cs & chain_share$type == "SingleCell"] %>% unique()
+      if(length(cs_1) == 0){
+        print(cs)
+        next
+      }
+      c_idx_1 <- which(grepl(cs_1, chain_share$sample_new_shared_sub))
+      c_idx_2 <- which(grepl(cur_sample_new, chain_share$sample_new_shared_sub))
+      idx <- union(intersect(c_idx_1, c_idx_2), idx)
+    }
+    cur_result_share <- chain_share[idx,]
+    cur_result_share <- cur_result_share[cur_result_share$sample %in% c(cur_sample_list, cur_sample),]
+    
+    cur_result_st <- changeo_out[changeo_out$sample_new == cur_sample_new,]
+    cur_result <- rbind(cur_result_share, cur_result_st) %>% 
+      dplyr::distinct(sequence_id, .keep_all = T)
+    bin25_mol <- fread(glue("~/{cur_sample}/Bin{bin_size}/{cur_sample}_dedup.info.BinID.csv"))
+    bin25_mol$sequence_id <- paste(cur_sample, bin25_mol$id, sep = "_")
+    
+    cur_result <- dplyr::left_join(cur_result, bin25_mol[, c("binid", "sequence_id")])
+    cur_result$clone_name <- paste(cur_result$locus, cur_result$clone_id, sep = "_")
+    cur_result_st <- cur_result[!is.na(cur_result$binid),]
+    # nrow(cur_result)
+    nrow(cur_result[!is.na(cur_result$binid),])
+    dir.create(glue("~/version5/input_allelic/bin{bin_size}"), recursive = T)
+    save_table(cur_result, glue("~/version5/input_allelic/bin{bin_size}/{cur_sample}_info"))
+    cur_result_clone <- cur_result %>% dplyr::distinct(clone_id, locus, junction_aa, junction) %>% 
+      dplyr::rename(cdr3 = junction, cdr3_aa = junction_aa)
+    dir.create(glue("~/version5/input_cdr3aa/bin{bin_size}"), recursive = T)
+    save_table(cur_result_clone, glue("~/version5/input_cdr3aa/bin{bin_size}/{cur_sample}_cdr3aa"))
+    
+    
+    cur_result_sc <- cur_result[cur_result$type == "SingleCell" & cur_result$type_shared_main == "Shared",]
+    cur_result_sc$cell_barcode <- lapply(cur_result_sc$sequence_id, function(x)strsplit(x, "_contig")[[1]][1]) %>% unlist()
+    
+    if(!"IGH" %in% cur_result_sc$locus){
+      next
+    }
+    gt_mat <- table(cur_result_sc$cell_barcode, cur_result_sc$clone_name)
+    if(sum(rowSums(gt_mat) == 2) == 0){
+      print("no shared")
+    }else if(sum(rowSums(gt_mat) >= 2) == 1){
+      r_name <- rownames(gt_mat)
+      c_name <- colnames(gt_mat)
+      idx <- rowSums(gt_mat) >= 2
+      gt_mat2 <- matrix(gt_mat[idx,], nrow = 1)
+      rownames(gt_mat2) <- r_name[idx]
+      colnames(gt_mat2) <- c_name
+    }else{
+      idx <- c()
+      for(cb in rownames(gt_mat)){
+        cur_idx <- gt_mat[cb, ] > 0
+        if(sum(cur_idx) >= 2){
+          idx <- c(idx, cb)
+        }
+      }
+      gt_mat2 <- gt_mat[idx,]
+    }
+    df_gt2 <- list()
+    for(cb in rownames(gt_mat2)){
+      cur_idx <- which(gt_mat2[cb, ] > 0)
+      if(any(grepl("IGH", names(cur_idx))) & any(grepl("IGL|IGK", names(cur_idx)))){
+        cur_df <- data.frame(
+          Hclone = names(cur_idx)[grepl("IGH", names(cur_idx))],
+          Lclone = names(cur_idx)[grepl("IGL|IGK", names(cur_idx))]
+        )
+        df_gt2[[cb]] <- cur_df
+      }
+      
+    }
+    df_gt2 <- dplyr::bind_rows(df_gt2)
+    df_gt2$pair_name <- paste(df_gt2$Hclone, df_gt2$Lclone, sep = "_")
+    df_gt2 <- dplyr::distinct(df_gt2, pair_name, .keep_all = T) %>% as.data.frame()
+    
+    if(nrow(df_gt2) > 0){
+      share_sample <- c(share_sample, cur_sample) %>% unique()
+    }
+    
+    dir.create(glue("~/version5/grouth_truth/bin{bin_size}"), recursive = T)
+    write.table(df_gt2, glue("~/version5/grouth_truth/bin{bin_size}/{cur_sample}.tsv"), sep = "\t",
+                quote = F, col.names = T, row.names = T)
+    
+    
+    
+    cur_result <- read.table(glue("~/version5/input_allelic/bin{bin_size}/{cur_sample}_info.txt"), sep = '\t', header = TRUE)
+    cur_result$clone_id <- as.character(cur_result$clone_id)
+    cur_result$clone_name <- paste(cur_result$locus, cur_result$clone_id, sep = '_')
+    
+    input_spatial <- cur_result[cur_result$type == "Spatial", ]
+    clone_num <- table(input_spatial$clone_name)
+    df_clone_num <- input_spatial[, c("clone_name", "clone_num")] %>% dplyr::distinct(clone_name, .keep_all = T)
+    input_spatial$clone_num <- clone_num[input_spatial$clone_name]
+    
+    input_spatial_clone <- input_spatial %>% dplyr::distinct(binid, clone_name, .keep_all = T)
+    bin_num <- table(input_spatial_clone$clone_name)
+    input_spatial_clone$bin_num <- bin_num[input_spatial_clone$clone_name]
+    df_bin_num <- input_spatial_clone[, c("clone_name", "bin_num")] %>% dplyr::distinct(clone_name, .keep_all = T) %>% 
+      as.data.frame()
+    df_bin_num$bin_num <- as.numeric(df_bin_num$bin_num)
+    df_clone_num <- df_clone_num %>% dplyr::left_join(df_bin_num)
+    input_spatial <- input_spatial %>% 
+      dplyr::left_join(df_bin_num)
+    
+    input_spatial <- input_spatial[input_spatial$bin_num >= 1, ]
+    if(nrow(input_spatial) == 0){
+      next
+    }
+    if(length(unique(input_spatial$locus[input_spatial$locus == "IGH"])) == 0){
+      next
+    }     
+    if(length(unique(input_spatial$locus[input_spatial$locus %in% c("IGK", "IGL")])) == 0){
+      next
+    }
+    
+    
+    n_bin_bcr <- length(unique(input_spatial$binid[!is.na(input_spatial$binid)]))
+    n_H_clone <- length(unique(input_spatial$clone_name[(input_spatial$locus == "IGH") & (input_spatial$type == "Spatial")]))
+    
+    if(!file.exists(glue("~/version5/grouth_truth/bin{bin_size}/{cur_sample}.tsv"))){
+      next
+    }
+    
+    test_mat <- read.table(glue("~/version5/grouth_truth/bin{bin_size}/{cur_sample}.tsv"), sep = "\t", header = TRUE, row.names = 1)
+    test_mat <- test_mat[test_mat$Hclone %in% input_spatial$clone_name,]
+    # test_mat$Lclone_t <- test_mat$Lclone
+    test_mat <- dplyr::left_join(test_mat, df_clone_num, by = c("Hclone" = "clone_name"))
+    test_mat <- test_mat %>% dplyr::arrange(desc(bin_num))
+    L_clone_t <- c()
+    for(h in unique(test_mat$Hclone)){
+      df_h <- test_mat[test_mat$Hclone == h,]
+      L_clone_t <- c(L_clone_t, paste(df_h$Lclone, collapse =  ","))
+    }
+    names(L_clone_t) <- unique(test_mat$Hclone)
+    test_mat$Lclone_t <- L_clone_t[test_mat$Hclone]
+    n_test <- nrow(test_mat)
+    
+    
+    input_mat <- table(cur_result_st$binid, cur_result_st$clone_name)
+    dir.create(glue("~/version5/input_repair/bin{bin_size}"), recursive = T)
+    
+    write.table(input_mat, 
+                glue("~/version5/input_repair/bin{bin_size}/{cur_sample}_mat.tsv"), row.names = T,
+                col.names = T, quote = F, sep = "\t")
+    
+  }
+}
+
+
+### SIPEAC ====
+sample_list <- read.table("~/sc_st_share_sample1.txt", header = T)
+sample_list <- sample_list$sample_name
+# sample_list <- c("4266B", "4309B", "B4307", "B4266")
+thre_list <- read.table("~/threshold_0/threshold.txt", header = F)
+thre_list <- thre_list$V1
+# thre_list <- c(1)
+binsize_list <- c(20, 50, 110)
+pred_all <- list()
+root_dir <- "~/final_version/"
+dir.create(root_dir, recursive = T)
+for(cur_sample in sample_list){
+  
+  yang_score <- fread(glue("~/2025_fold0_epoch100/{cur_sample}_cdr3aa.csv"))
+  colnames(yang_score) <- c("IGH_cloneIds", "IGL_cloneIds", "score")
+  pair_name_y <- paste(yang_score$IGH_cloneIds, yang_score$IGL_cloneIds, sep = "_")
+  yang_score$IGH_cloneIds <- paste("clone_", as.character(yang_score$IGH_cloneIds), sep = "")
+  yang_score$IGL_cloneIds <- paste("clone_", as.character(yang_score$IGL_cloneIds), sep = "")
+  yang_score_mat <- tidyr::pivot_wider(yang_score, names_from = "IGL_cloneIds",
+                                       values_from = "score") %>% as.data.frame()
+  yang_score$pair_name_y <- pair_name_y
+  dim(yang_score_mat)
+  yang_score <- yang_score %>% 
+    dplyr::group_by(IGH_cloneIds) %>% 
+    dplyr::mutate(rank_s = n() - rank(score)) %>% 
+    as.data.table()
+  
+  all_igh <- yang_score_mat$IGH_cloneIds
+  all_igl <-  colnames(yang_score_mat[,-1]) %>% as.character()
+  yang_score_mat <- yang_score_mat[, -1]
+  yang_score_mat <- as.matrix(yang_score_mat)
+  rownames(yang_score_mat) <- all_igh
+  colnames(yang_score_mat) <- all_igl
+  
+  for (bin_size in binsize_list) {
+    if(!file.exists(glue("~/input_allelic/bin{bin_size}/{cur_sample}_info.txt"))){
+      next
+    }
+    dir.create(glue("~/final_version/bin{bin_size}/", recursive = T))
+    
+    # dir.create(glue("~/allelic_result/bin{bin_size}/"), recursive = T)
+    input <- read.table(glue("~/input_allelic/bin{bin_size}/{cur_sample}_info.txt"), sep = '\t', header = TRUE)
+    input$clone_id <- as.character(input$clone_id)
+    input$clone_name <- paste(input$locus, input$clone_id, sep = '_')
+    
+    input_spatial <- input[grepl("Spatial", input$type), ]
+    clone_num <- table(input_spatial$clone_name)
+    df_clone_num <- input_spatial[, c("clone_name", "clone_num")] %>% dplyr::distinct(clone_name, .keep_all = T)
+    input_spatial$clone_num <- clone_num[input_spatial$clone_name]
+    
+    input_spatial_clone <- input_spatial %>% dplyr::distinct(binid, clone_name, .keep_all = T)
+    bin_num <- table(input_spatial_clone$clone_name)
+    input_spatial_clone$bin_num <- bin_num[input_spatial_clone$clone_name]
+    df_bin_num <- input_spatial_clone[, c("clone_name", "bin_num")] %>% dplyr::distinct(clone_name, .keep_all = T) %>% 
+      as.data.frame()
+    df_bin_num$bin_num <- as.numeric(df_bin_num$bin_num)
+    df_clone_num <- df_clone_num %>% dplyr::left_join(df_bin_num)
+    
+    input_spatial <- input_spatial %>% 
+      dplyr::left_join(df_bin_num)
+    
+    if(!file.exists(glue("~/grouth_truth/bin{bin_size}/{cur_sample}.tsv"))){
+      next
+    }
+    test_mat <- read.table(glue("~/grouth_truth/bin{bin_size}/{cur_sample}.tsv"), sep = "\t", header = TRUE, row.names = 1)
+    test_mat <- test_mat[test_mat$Hclone %in% input_spatial$clone_name,]
+    L_clone_t <- c()
+    for(h in unique(test_mat$Hclone)){
+      df_h <- test_mat[test_mat$Hclone == h,]
+      L_clone_t <- c(L_clone_t, paste(df_h$Lclone, collapse =  ","))
+    }
+    names(L_clone_t) <- unique(test_mat$Hclone)
+    test_mat$Lclone_t <- L_clone_t[test_mat$Hclone]
+    
+    input_mat <- table(input_spatial$binid, input_spatial$clone_name)
+    
+    print(paste("calulate", cur_sample, "==============================="))
+    if_continue <-  T
+    n_loop <- 1
+    exclued_h <- c()
+    exclued_l <- c()
+    output_pair_list <- list()
+    while (if_continue) {
+      print(glue("loop {n_loop} ======================"))
+      
+      if(sum(!colnames(input_mat) %in% c(exclued_h, exclued_l)) == 1){
+        break
+      }
+      
+      cur_input <- input_mat[, !colnames(input_mat) %in% c(exclued_h, exclued_l)]
+      
+      if(sum(grepl('IGH', colnames(cur_input))) ==1 ){
+        x_1 <- cur_input[, grepl('IGH', colnames(cur_input))]
+        x_1 <- matrix(x_1, ncol = 1)
+        colnames(x_1) <- colnames(cur_input)[grepl('IGH', colnames(cur_input))]
+      }else{
+        x_1 <- cur_input[, grepl('IGH', colnames(cur_input))]
+      }
+      if(sum(grepl('IGL|IGK', colnames(cur_input))) ==1 ){
+        x_2 <- cur_input[, grepl('IGL|IGK', colnames(cur_input))]
+        x_2 <- matrix(x_2, ncol = 1)
+        colnames(x_2) <- colnames(cur_input)[grepl('IGL|IGK', colnames(cur_input))]
+      }else{
+        x_2 <- cur_input[, grepl('IGL|IGK', colnames(cur_input))]
+      }
+      
+      c_1 <- rowSums(x_1) >= 1
+      c_2 <- rowSums(x_2) >= 1
+      combined_condition <- c_1 & c_2
+      if(sum(combined_condition) == 1){
+        cur_input_HL <- data.frame(matrix(cur_input[combined_condition, ], nrow = 1))
+        rownames(cur_input_HL) <- rownames(cur_input)[combined_condition]
+        colnames(cur_input_HL) <- colnames(cur_input)
+      }else if(sum(combined_condition) == 0){
+        print(glue("{cur_sample} no pair ======================"))
+        break
+      }else{
+        cur_input_HL <- cur_input[combined_condition, ]
+      }
+      
+      if(sum(grepl('IGH', colnames(cur_input_HL))) == 1){
+        c_name <- colnames(cur_input_HL)[grepl('IGH', colnames(cur_input_HL))]
+        cur_IgH_mat <- data.frame(
+          V1=cur_input_HL[, grepl('IGH', colnames(cur_input_HL))]
+        )
+        colnames(cur_IgH_mat) <- c_name
+      }else{
+        cur_IgH_mat <- cur_input_HL[, grepl('IGH', colnames(cur_input_HL))]
+      }
+      
+      if(sum(grepl('IGL|IGK', colnames(cur_input_HL))) == 1){
+        c_name <- colnames(cur_input_HL)[grepl('IGL|IGK', colnames(cur_input_HL))]
+        cur_IgL_mat <- data.frame(
+          V1=cur_input_HL[, grepl('IGL|IGK', colnames(cur_input_HL))]
+        )
+        colnames(cur_IgL_mat) <- c_name
+      }else{
+        cur_IgL_mat <- cur_input_HL[, grepl('IGL|IGK', colnames(cur_input_HL))]
+      }
+      ###  写出基本配对文件 
+      if(n_loop == 1){
+        output_pair_H <- c()
+        output_pair_L <- c()
+        output_pair_binid <- c()
+        output_h_count <- c()
+        output_l_count <- c()
+        output_h_p <- c()
+        output_l_l <- c()
+        ## 记录每一个配对信息
+        for (cur_bin in rownames(cur_IgH_mat)) {
+          cur_IgH_idx <- which(cur_IgH_mat[cur_bin,] >= 1)
+          cur_IgH_1 <- cur_IgH_mat[cur_bin, cur_IgH_idx]
+          cur_IgH_1 <- cur_IgH_1/sum(cur_IgH_1)
+          cur_IgH_1 <- cur_IgH_1[cur_IgH_1!=0]
+          names(cur_IgH_1) <- names(cur_IgH_idx)
+          cur_IgH_1 <- cur_IgH_1[cur_IgH_1 == max(cur_IgH_1)]
+          
+          cur_IgL_idx <- which(cur_IgL_mat[cur_bin,] >= 1)
+          cur_IgL_1 <- cur_IgL_mat[cur_bin,cur_IgL_idx]
+          cur_IgL_1 <- cur_IgL_1/sum(cur_IgL_1)
+          cur_IgL_1 <- cur_IgL_1[cur_IgL_1!=0]
+          names(cur_IgL_1) <- names(cur_IgL_idx)
+          cur_IgL_1 <- cur_IgL_1[cur_IgL_1 == max(cur_IgL_1)]
+          
+          for(h in names(cur_IgH_1)){
+            for(l in names(cur_IgL_1)){
+              output_pair_H <- c(output_pair_H, h)
+              output_pair_L <- c(output_pair_L, l)
+              output_h_count <- c(output_h_count, cur_IgH_mat[cur_bin, h])
+              output_l_count <- c(output_l_count, cur_IgL_mat[cur_bin, l])
+              output_h_p <- c(output_h_p, cur_IgH_1[h])
+              output_l_l <- c(output_l_l, cur_IgL_1[l])
+              output_pair_binid <- c(output_pair_binid, cur_bin)
+            }
+          }
+          
+        }
+        
+        
+        cur_output_pair <- data.frame(
+          Hclone = output_pair_H,
+          Lclone = output_pair_L,
+          hcount = output_h_count,
+          lcount = output_l_count,
+          hp = output_h_p,
+          lp = output_l_l,
+          binid = output_pair_binid)
+        
+        if(nrow(cur_output_pair) == 0){
+          break
+        }
+        cur_output_pair$pair_name <- paste(cur_output_pair$Hclone, cur_output_pair$Lclone, sep = '_')
+        cur_output_pair <- cur_output_pair %>% dplyr::left_join(test_mat[, c("Hclone", "Lclone_t")])
+        df_clone_num_h <- df_clone_num[grepl("IGH",df_clone_num$clone_name),] %>% as.data.frame()
+        colnames(df_clone_num_h) <- c("clone_name", "clone_num_H", "bin_num_H")
+        cur_output_pair <- cur_output_pair %>% dplyr::left_join(df_clone_num_h, by = c("Hclone" = "clone_name"))
+        df_clone_num_l <- df_clone_num[grepl("IGK|IGL",df_clone_num$clone_name),]
+        colnames(df_clone_num_l) <- c("clone_name", "clone_num_L", "bin_num_L")
+        cur_output_pair <- cur_output_pair %>% dplyr::left_join(df_clone_num_l, by = c("Lclone" = "clone_name"))
+        
+        
+        cur_output_pair <- cur_output_pair %>% dplyr::arrange(desc(bin_num_H), desc(bin_num_L))
+        cur_output_pair <- cur_output_pair %>% 
+          dplyr::group_by(pair_name) %>% 
+          dplyr::mutate(pair_count = n()) %>% as.data.frame() %>% 
+          dplyr::arrange(desc(pair_count))
+        write.table(cur_output_pair,
+                    glue("~/final_version/bin{bin_size}/{cur_sample}_pair_raw.tsv"),
+                    sep = "\t", quote = FALSE, row.names = FALSE)
+        
+        
+        exist_idx <- c()
+        for(i in 1:nrow(test_mat)){
+          cur_h <- test_mat$Hclone[i]
+          cur_l <- test_mat$Lclone[i]
+          cur_pair <- glue("{cur_h}_{cur_l}")
+          cur_df <- cur_output_pair[cur_output_pair$pair_name == cur_pair ,]
+          if(nrow(cur_df) > 0){
+            exist_idx <- c(exist_idx, i)
+          }
+        }
+        test_mat_exist <- test_mat[exist_idx, ]
+        
+        summarise_h <- cur_output_pair %>% 
+          dplyr::group_by(Hclone)%>% 
+          dplyr::summarise(n_pair = n())
+        
+        test_mat_1 <- dplyr::left_join(test_mat_exist,
+                                       dplyr::distinct(cur_output_pair, pair_name, pair_count)
+        ) %>% 
+          dplyr::left_join(summarise_h)
+        test_mat_1$IGH_cloneIds <- gsub("IGH_", "", test_mat_1$Hclone) %>% as.character()
+        test_mat_1$IGL_cloneIds <- gsub("IGL_", "", test_mat_1$Lclone) %>% as.character()
+        test_mat_1$IGL_cloneIds <- gsub("IGK_", "", test_mat_1$IGL_cloneIds) %>% as.character()
+        test_mat_1$pair_name_y <- paste( test_mat_1$IGH_cloneIds,
+                                         test_mat_1$IGL_cloneIds,
+                                         sep = "_")
+        test_mat_1 <- dplyr::left_join(test_mat_1,
+                                       yang_score[, c("pair_name_y", "score", "rank_s")]
+        )
+        write.table(test_mat_1,
+                    glue("~/final_version/bin{bin_size}/{cur_sample}_test_summary.tsv"),
+                    sep = "\t", quote = FALSE, row.names = FALSE)
+      }
+      
+      ###  算法正式部分 
+      
+      output_pair_H <- c()
+      output_pair_L <- c()
+      output_pair_binid <- c()
+      pair_count_list <- c()
+      score_list <- c()
+      cs_list <- c()
+      score_rank_list <- c()
+      for (cur_bin in rownames(cur_IgH_mat)) {
+        cur_max_IgH_count <- max(cur_IgH_mat[cur_bin,])
+        cur_max_IgH_idx <- which(cur_IgH_mat[cur_bin,] == cur_max_IgH_count)
+        cur_max_IgH <- colnames(cur_IgH_mat)[cur_max_IgH_idx]
+        
+        cur_max_IgL_count <- max(cur_IgL_mat[cur_bin,])
+        cur_max_IgL_idx <- which(cur_IgL_mat[cur_bin,] == cur_max_IgL_count)
+        cur_max_IgL <- colnames(cur_IgL_mat)[cur_max_IgL_idx]
+        pair_count_expand <- cur_max_IgH_count * cur_max_IgL_count
+        
+        for(h in cur_max_IgH){
+          for(l in cur_max_IgL){
+            output_pair_H <- c(output_pair_H, h)
+            output_pair_L <- c(output_pair_L, l)
+            output_pair_binid <- c(output_pair_binid, cur_bin)
+            pair_count_list <- c(pair_count_list, pair_count_expand)
+            h_n <- gsub("IGH_", "", h) %>% as.character()
+            l_n <- gsub("IGL_", "", l) %>% as.character()
+            l_n <- gsub("IGK_", "", l_n) %>% as.character()
+            h_n <- glue("clone_{h_n}")
+            l_n <- glue("clone_{l_n}")
+            
+            cur_score <- yang_score_mat[h_n,  l_n] %>% as.numeric()
+            score_list <-  c(score_list, cur_score)
+          }
+        }
+        
+      }
+      
+      cur_output_pair <- data.frame(
+        Hclone = output_pair_H,
+        Lclone = output_pair_L,
+        binid = output_pair_binid,
+        pair_count_expand = pair_count_list,
+        score = score_list
+      ) %>% as.data.table()
+      
+      if(nrow(cur_output_pair) == 0){
+        break
+      }
+      cur_output_pair$pair_name <- paste(cur_output_pair$Hclone, cur_output_pair$Lclone, sep = '_')
+      cur_output_pair <- cur_output_pair %>%
+        group_by(pair_name) %>% mutate(pair_count = n(),
+                                       pair_count_expand = sum(pair_count_expand)) %>%
+        as.data.frame()
+      cur_output_pair$pc_dot_s <-  cur_output_pair$pair_count * cur_output_pair$score
+      cur_output_pair <- cur_output_pair %>% dplyr::left_join(test_mat[, c("Hclone", "Lclone_t")])
+      cur_output_pair <- cur_output_pair %>% dplyr::left_join(df_clone_num, by = c("Hclone" = "clone_name"))
+      cur_output_pair <- dplyr::arrange(cur_output_pair, desc(clone_num), desc(pair_count))
+      cur_output_pair_2 <- cur_output_pair %>%
+        dplyr::group_by(Lclone) %>%
+        dplyr::filter(pc_dot_s == max(pc_dot_s)) %>% as.data.table()
+      cur_output_pair_2 <- dplyr::distinct(cur_output_pair_2, pair_name, .keep_all = T)
+      cur_output_pair_2$clone_num <- as.numeric(cur_output_pair_2$clone_num)
+      
+      h_count <- table(cur_output_pair_2$Hclone) %>% sort %>% rev()
+      ## 按照轻链逐级筛选Clone
+      save_pair <- c()
+      for(h in names(h_count)){
+        sub_pair <- cur_output_pair_2[cur_output_pair_2$Hclone == h,]
+        sub_max <- sub_pair[sub_pair$pc_dot_s == max(sub_pair$pc_dot_s),]
+        if(nrow(sub_max) == 1){
+          # exclued_l <- c(exclued_l, l)
+          
+          save_pair <- c(save_pair, sub_max$pair_name)
+          next
+        }
+        
+        # if(all(sub_pair_max$pair_count == 1)){
+        #   sub_pair_max <- sub_pair_max[sub_pair_max$score == max(sub_pair$score),]
+        #   save_pair <- c(save_pair, sub_pair_max$pair_name)
+        #   
+        # }
+        
+      }
+      if(length(save_pair) == 0){
+        output_pair_list[[n_loop]] <- cur_output_pair_2
+        print(glue("end {n_loop} !! ====================="))
+        break
+      }
+      ## 至此为止是确认的pair
+      cur_output_pair_3 <- cur_output_pair_2[cur_output_pair_2$pair_name %in% save_pair,]
+      print(glue("dim pair  = {dim(cur_output_pair_3)[1]}"))
+      output_pair_test <- cur_output_pair_3[cur_output_pair_3$Hclone %in% test_mat$Hclone,]
+      print(glue("dim output_pair_test = {dim(output_pair_test)[1]}"))
+      # [1] 29
+      acc = sum(output_pair_test$pair_name %in% test_mat$pair_name)/nrow(output_pair_test)
+      print(glue("acc = {acc}"))
+      # [1] 0.8787879
+      output_pair_list[[n_loop]] <- cur_output_pair_3
+      
+      exclued_h <- c(exclued_h, cur_output_pair_3$Hclone)
+      exclued_l <- c(exclued_l, cur_output_pair_3$Lclone)
+      
+      n_loop <- n_loop + 1
+    }
+    if(length(output_pair_list) == 0){
+      next
+    }
+    output_pair_final <- dplyr::bind_rows(output_pair_list)
+    table(output_pair_final$Hclone)
+    output_pair_final <- output_pair_final %>%
+      dplyr::mutate(pair_count_expand = pair_count_expand * pair_count) %>%
+      dplyr::group_by(Hclone) %>%
+      dplyr::filter(pair_count_expand == max(pair_count_expand)) %>% as.data.frame()
+    # x1 <- dplyr::bind_rows( output_pair_list[1:5])
+    
+    write.table(output_pair_final, glue("~/final_version/bin{bin_size}/{cur_sample}_final_e100.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    
+    output_pair_final <- output_pair_final %>% 
+      dplyr::distinct(pair_name, .keep_all = T)
+    output_pair_test <- output_pair_final[output_pair_final$Hclone %in% test_mat$Hclone, ]
+    write.table(output_pair_test, glue("~/final_version/bin{bin_size}/{cur_sample}_test_e100.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+    
+    for(cur_thre in thre_list){
+      output_pair_final1 <- output_pair_final[output_pair_final$bin_num >= cur_thre,]
+      output_pair_test <- output_pair_final1[output_pair_final1$Hclone %in% test_mat$Hclone, ]
+      
+      df_bin_num1 <- df_bin_num[df_bin_num$bin_num >= cur_thre, ]
+      n_H_clone <- nrow(df_bin_num1[grepl("IGH", df_bin_num1$clone_name), ])
+      n_L_clone <- nrow(df_bin_num1[!grepl("IGH", df_bin_num1$clone_name), ])
+      n_H_clone_pred <- length(unique(output_pair_final1$Hclone))
+      
+      print(glue("dim output_pair_final = {dim(output_pair_final)[1]}"))
+      n_test <- nrow(test_mat[test_mat$Hclone %in% output_pair_final1$Hclone,])
+      n_pred <- nrow(output_pair_test)
+      
+      print(glue("dim output_pair_test = {dim(output_pair_test)[1]}"))
+      acc = sum(output_pair_test$pair_name %in% test_mat$pair_name)/nrow(output_pair_test)
+      print(glue("acc_final = {acc}"))
+      eff <- n_H_clone_pred/n_H_clone
+      print(glue("eff_final = {eff}"))
+      
+      pred_s <- data.frame(
+        cur_sample = cur_sample,
+        n_H_clone = n_H_clone,
+        n_L_clone = n_L_clone,
+        n_H_clone_pred = n_H_clone_pred,
+        eff = eff,
+        n_test = n_test,
+        threshold = cur_thre,
+        bin_size = bin_size,
+        acc = acc
+      )
+      
+      pred_all[[glue("{cur_sample}_bin{bin_size}_{cur_thre}")]] <- pred_s
+    }
+    
+    
+    
+  }}
+df_pred_all <- bind_rows(pred_all) %>% dplyr::arrange(desc(n_test))
+write.table(df_pred_all%>% dplyr::arrange(desc(n_test)),
+            glue("~/final_version/summary_e100.tsv"), sep = "\t", quote = FALSE, row.names = FALSE)
+
+
 #### Figure 2E ====
 
 accuracy_results <- list()
@@ -28,7 +617,7 @@ for (i in 1:nrow(allelic_summary)) {
 allelic_summary <- allelic_summary[!is.na(allelic_summary$repair_accuracy) & !is.na(allelic_summary$acc), ]
 allelic_summary <- dplyr::arrange(allelic_summary, bin_size, threshold, cur_sample)
 # allelic_summary <- allelic_summary[!allelic_summary$cur_sample %in% c("4266B", "4309B", "B4266", "B4309"),]
-new_id <- fread("~/newid-加上标签.csv")
+new_id <- fread("~/newid.csv")
 allelic_summary <- dplyr::left_join(allelic_summary, new_id, by = c("cur_sample" = "rawID"))
 write.csv(allelic_summary, glue('~/final_version/compare.csv'), quote = FALSE)
 
