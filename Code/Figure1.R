@@ -1,3 +1,5 @@
+source("Code/figure_helpers.R")
+
 #### Figure 1B ====
 bcr_merge <- readRDS("/Users/mac/Desktop/Rproject/Pacbio/文章/RDS/merged_bcr.rds")
 

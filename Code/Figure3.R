@@ -1,3 +1,5 @@
+source("Code/figure_helpers.R")
+
 library(glue)
 library(readxl)
 library(readr)
@@ -718,7 +720,7 @@ for(cur_tls in unique(use_id$tls)){
 
 
 ### check tree cell type====
-source("~/expand_n_layer.R")
+source("Code/Extended_Analyses/R/expand_n_layer.R")
 merge_bcr <- readRDS("~/merged_bcr.rds")
 merge_bcr_rh05b <- merge_bcr[merge_bcr$sample == "RH05B",]
 cur_sample <- "RH05B"

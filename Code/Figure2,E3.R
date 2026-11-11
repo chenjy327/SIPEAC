@@ -1,3 +1,5 @@
+source("Code/figure_helpers.R")
+
 #### prepare data =====
 pacbio_sc_info <- fread("~/Pacbio_SingleCell.csv")
 sample_dir <- pacbio_sc_info$SC_Path

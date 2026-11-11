@@ -9,6 +9,7 @@ blastn_out=$4
 echo $sample_name
 python_path=/Users/mac/Desktop/Chenjy/tools/conda/anaconda3/envs/bracer/bin/python
 rscript_path=/usr/local/bin/Rscript
+script_dir=$(cd "$(dirname "$0")" && pwd)
 igblast_path=/Users/mac/Desktop/Chenjy/tools/igblast/
 NPROC=50
 
@@ -44,7 +45,7 @@ echo "-----------------------Extract BCR reads ---------------------------------
 #--blast_rst ${blastn_out}/${sample_name}/all_seq/BLAST_output/blastsummary_H.txt
 
 #
-/usr/local/bin/Rscript /Users/mac/Desktop/Rproject/Pacbio/Pacbio-BCR-Pipeline/single_sample/add_info.R \
+${rscript_path} ${script_dir}/add_info.R \
 --sample ${sample_name} --outdir ${out_dir} --b_outdir ${blastn_out}
 
 if test -e ${out_dir}/${sample_name}_threshold.txt; then
@@ -68,7 +69,7 @@ fi
 --nproc 50
 
 
-/usr/local/bin/Rscript /Users/mac/Desktop/Rproject/Pacbio/Pacbio-BCR-Pipeline/single_sample/rename_column.R --sample ${sample_name} --outdir ${out_dir}
+${rscript_path} ${script_dir}/rename_column.R --sample ${sample_name} --outdir ${out_dir}
 
 
 

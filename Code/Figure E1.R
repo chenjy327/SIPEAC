@@ -1,3 +1,5 @@
+source("Code/figure_helpers.R")
+
 #### Figure E1B smrt igh ====
 P1 <- fread('~/P1_all_ontissue_clone_list.csv') 
 P1$cloneId <- paste0('P1_',P1$cloneId )
