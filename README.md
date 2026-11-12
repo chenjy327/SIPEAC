@@ -1,8 +1,13 @@
-<p align="center">
-  <img src="assets/sipeac_title.svg" alt="SIPEAC" width="640">
-</p>
+# <p>  <b>SIPEAC</b> </p>
 
-<h3 align="center">A Spatial High-Throughput Approach Decodes Tissue-Resident Antibodies Uncovering Therapeutic Targets in Tumors</h3>
+![R](https://img.shields.io/badge/R-4.2-276DC3?logo=r&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
+![Shell](https://img.shields.io/badge/Shell-bash-4EAA25?logo=gnubash&logoColor=white)
+[![repo size](https://img.shields.io/github/repo-size/chenjy327/SIPEAC)](https://github.com/chenjy327/SIPEAC/)
+[![last commit](https://img.shields.io/github/last-commit/chenjy327/SIPEAC)](https://github.com/chenjy327/SIPEAC/commits/main)
+[![GitHub stars](https://img.shields.io/github/stars/chenjy327/SIPEAC?style=social)](https://github.com/chenjy327/SIPEAC/)
+
+**SIPEAC (Spatial Identification of Paired Endogenous Antibody Heavy-Light Chains) preferentially targets plasma cells and couples spatial transcriptomics with the structurally paired preference of VH:VL sequences to clone tissue-resident monoclonal antibodies in situ.**
 
 ## Code
 
