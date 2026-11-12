@@ -1,13 +1,15 @@
-# <p>  <b>SIPEAC</b> </p>
+<p align="center">
+  <img src="sipeac_title.svg" alt="SIPEAC" width="640">
+</p>
 
-![R](https://img.shields.io/badge/R-4.2-276DC3?logo=r&logoColor=white)
-![Python](https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white)
-![Shell](https://img.shields.io/badge/Shell-bash-4EAA25?logo=gnubash&logoColor=white)
-[![repo size](https://img.shields.io/github/repo-size/chenjy327/SIPEAC)](https://github.com/chenjy327/SIPEAC/)
-[![last commit](https://img.shields.io/github/last-commit/chenjy327/SIPEAC)](https://github.com/chenjy327/SIPEAC/commits/main)
-[![GitHub stars](https://img.shields.io/github/stars/chenjy327/SIPEAC?style=social)](https://github.com/chenjy327/SIPEAC/)
-
-**SIPEAC (Spatial Identification of Paired Endogenous Antibody Heavy-Light Chains) preferentially targets plasma cells and couples spatial transcriptomics with the structurally paired preference of VH:VL sequences to clone tissue-resident monoclonal antibodies in situ.**
+<p align="center">
+  <img src="https://img.shields.io/badge/R-4.2-276DC3?logo=r&logoColor=white" alt="R">
+  <img src="https://img.shields.io/badge/Python-3-3776AB?logo=python&logoColor=white" alt="Python">
+  <img src="https://img.shields.io/badge/Shell-bash-4EAA25?logo=gnubash&logoColor=white" alt="Shell">
+  <a href="https://github.com/chenjy327/SIPEAC/"><img src="https://img.shields.io/github/repo-size/chenjy327/SIPEAC" alt="repo size"></a>
+  <a href="https://github.com/chenjy327/SIPEAC/commits/main"><img src="https://img.shields.io/github/last-commit/chenjy327/SIPEAC" alt="last commit"></a>
+  <a href="https://github.com/chenjy327/SIPEAC/"><img src="https://img.shields.io/github/stars/chenjy327/SIPEAC?style=social" alt="GitHub stars"></a>
+</p>
 
 ## Code
 
