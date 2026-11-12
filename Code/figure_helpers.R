@@ -19,11 +19,11 @@ suppressPackageStartupMessages({
   library(ComplexHeatmap)
 })
 
-source("Code/Extended_Analyses/R/expand_n_layer.R")
+source("Code/Extended_Analyses/utils_spatial_expand.R")
 
 # python 路径可用环境变量 SIPEAC_PYTHON 指定
 PYTHON_BIN <- Sys.getenv("SIPEAC_PYTHON", "python3")
-PLOT_CLUSTER_PY <- "Code/Extended_Analyses/R/plot_cluster.py"
+PLOT_CLUSTER_PY <- "Code/Extended_Analyses/utils_spatial_plot.py"
 
 mycolor_merge <- c("#EE3743", "#33a02c", "#0B7FAB", "#6a3d9a", "#ff5084", "#ff7f00", "#01ceff", "#F6A9BD", "#fdbf6f", "#c51b7d",
                    "#6F6C9E", "#01665e", "#a6cee3", "#b2df8a", "#ffff99", "#bf812d",  "#999999", "#BB7DB2", "#824615", "#ffff33", "#86DBD4",

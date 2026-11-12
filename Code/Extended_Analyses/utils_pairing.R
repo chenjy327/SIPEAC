@@ -2,7 +2,7 @@ suppressPackageStartupMessages({
   library(glue); library(dplyr)
 })
 
-source("Code/Extended_Analyses/R/expand_n_layer.R")
+source("Code/Extended_Analyses/utils_spatial_expand.R")
 
 .pick_mat <- function(m, pat) {
   hit <- grepl(pat, colnames(m))

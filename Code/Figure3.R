@@ -720,7 +720,7 @@ for(cur_tls in unique(use_id$tls)){
 
 
 ### check tree cell type====
-source("Code/Extended_Analyses/R/expand_n_layer.R")
+source("Code/Extended_Analyses/utils_spatial_expand.R")
 merge_bcr <- readRDS("~/merged_bcr.rds")
 merge_bcr_rh05b <- merge_bcr[merge_bcr$sample == "RH05B",]
 cur_sample <- "RH05B"

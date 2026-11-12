@@ -1,8 +1,8 @@
 #### 抗体周围IFI30表达 ====
 PROJECT_ROOT <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, "data")
-source("Code/Extended_Analyses/R/io.R")
-source("Code/Extended_Analyses/R/plot.R")
+source("Code/Extended_Analyses/utils_io.R")
+source("Code/Extended_Analyses/utils_plot.R")
 input_dir <- file.path(data_dir, "hzy")
 processed_dir <- file.path(dirs$processed, "hzy")
 table_dir <- file.path(dirs$tables, "hzy")
@@ -21,7 +21,7 @@ library(readxl)
 library(magrittr)
 library(purrr)
 library(cli)
-source("Code/Extended_Analyses/R/expand_n_layer.R")
+source("Code/Extended_Analyses/utils_spatial_expand.R")
 
 merge_metadata <- read.table(file.path(input_dir, "data/Bin50_classic_celltype_metadata_merge.txt"), 
     header = T)

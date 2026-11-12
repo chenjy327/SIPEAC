@@ -1,8 +1,8 @@
 PROJECT_ROOT <- normalizePath(getwd(), winslash = '/', mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, 'data')
-source('Code/Extended_Analyses/R/io.R')
-source('Code/Extended_Analyses/R/plot.R')
-source('Code/Extended_Analyses/R/04_Clonotype_functions.R')
+source('Code/Extended_Analyses/utils_io.R')
+source('Code/Extended_Analyses/utils_plot.R')
+source('Code/Extended_Analyses/04_clonotype_rarefaction_functions.R')
 
 #### 参数 ====
 

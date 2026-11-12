@@ -1,14 +1,14 @@
 #### Packages and paths ####
 PROJECT_ROOT <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, "data")
-source("Code/Extended_Analyses/R/io.R")
-source("Code/Extended_Analyses/R/plot.R")
+source("Code/Extended_Analyses/utils_io.R")
+source("Code/Extended_Analyses/utils_plot.R")
 library(ggplot2)
 library(dplyr)
 library(tidyr)
 library(patchwork)
 library(scales)
-source("Code/Extended_Analyses/R/05_Repair_functions.R")
+source("Code/Extended_Analyses/05_repair_comparison_functions.R")
 
 #### Input ####
 sipeac_root <- file.path(dirs$sipeac, "final_version")

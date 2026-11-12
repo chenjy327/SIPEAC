@@ -1,8 +1,8 @@
 #### 抗原抗体邻域置换和空间图 ====
 PROJECT_ROOT <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, "data")
-source("Code/Extended_Analyses/R/io.R")
-source("Code/Extended_Analyses/R/plot.R")
+source("Code/Extended_Analyses/utils_io.R")
+source("Code/Extended_Analyses/utils_plot.R")
 input_dir <- file.path(data_dir, "hzy")
 processed_dir <- file.path(dirs$processed, "hzy")
 table_dir <- file.path(dirs$tables, "hzy")
@@ -20,7 +20,7 @@ library(spdep)
 library(magrittr)
 library(purrr)
 library(cli)
-source("Code/Extended_Analyses/R/expand_n_layer.R")
+source("Code/Extended_Analyses/utils_spatial_expand.R")
 
 calc_contact_matrix <- function(data_df, neighbor_list) {
     all_groups <- sort(unique(data_df$group))

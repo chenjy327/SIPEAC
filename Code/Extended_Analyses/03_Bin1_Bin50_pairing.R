@@ -1,15 +1,15 @@
 #### Packages and paths ####
 PROJECT_ROOT <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, "data")
-source("Code/Extended_Analyses/R/io.R")
-source("Code/Extended_Analyses/R/plot.R")
+source("Code/Extended_Analyses/utils_io.R")
+source("Code/Extended_Analyses/utils_plot.R")
 library(data.table)
 library(dplyr)
 library(tidyr)
 library(ggplot2)
 library(patchwork)
-source("Code/Extended_Analyses/R/pairing.R")
-source("Code/Extended_Analyses/R/03_Bin1_Bin50_functions.R")
+source("Code/Extended_Analyses/utils_pairing.R")
+source("Code/Extended_Analyses/03_bin_resolution_functions.R")
 
 #### Input ####
 ALL_SAMPLE_PATH <- file.path(dirs$metadata, "sc_34.txt")

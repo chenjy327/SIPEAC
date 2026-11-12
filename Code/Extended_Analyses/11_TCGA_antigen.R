@@ -1,8 +1,8 @@
 #### TCGA TLS与Tumor/Paratumor差异 ====
 PROJECT_ROOT <- normalizePath(getwd(), winslash = "/", mustWork = TRUE)
 data_dir <- file.path(PROJECT_ROOT, "data")
-source("Code/Extended_Analyses/R/io.R")
-source("Code/Extended_Analyses/R/plot.R")
+source("Code/Extended_Analyses/utils_io.R")
+source("Code/Extended_Analyses/utils_plot.R")
 input_dir <- file.path(data_dir, "hzy")
 processed_dir <- file.path(dirs$processed, "hzy")
 table_dir <- file.path(dirs$tables, "hzy")

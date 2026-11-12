@@ -3,7 +3,7 @@ suppressPackageStartupMessages({
 })
 
 PYTHON_BIN <- "python3"
-PLOT_CLUSTER_PY <- proj_path("Code", "Extended_Analyses", "R", "plot_cluster.py")
+PLOT_CLUSTER_PY <- proj_path("Code", "Extended_Analyses", "utils_spatial_plot.py")
 
 theme_csl <- function(base_size = 7, base_family = "sans") {
   theme_classic(base_size = base_size, base_family = base_family) +
