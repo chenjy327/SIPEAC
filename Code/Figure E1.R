@@ -192,7 +192,7 @@ sci_p1_clone <- readRDS("~/sci_p1_clone.rds")
 sci_p1_clone$sample <- "p1"
 sci_p1_clone <- sci_p1_clone %>% dplyr::select(-"locus")
 sci_p2_clone <- readRDS("~/sci_p2_clone.rds")
-sci_p2_clone$sample <- "p1"
+sci_p2_clone$sample <- "p2"
 sci_clone <- rbind(sci_p1_clone, sci_p2_clone)
 sci_clone$clone_id <- paste(sci_clone$sample, sci_clone$cloneid, sep = "_")
 sci_clone <- sci_clone[grepl("IGH", sci_clone$cloneid),]
@@ -239,7 +239,7 @@ sci_p1_clone <- readRDS("~/sci_p1_clone.rds")
 sci_p1_clone$sample <- "p1"
 sci_p1_clone <- sci_p1_clone %>% dplyr::select(-"locus")
 sci_p2_clone <- readRDS("~/sci_p2_clone.rds")
-sci_p2_clone$sample <- "p1"
+sci_p2_clone$sample <- "p2"
 sci_clone <- rbind(sci_p1_clone, sci_p2_clone)
 sci_clone$clone_id <- paste(sci_clone$sample, sci_clone$cloneid, sep = "_")
 sci_clone <- sci_clone[grepl("TRB", sci_clone$cloneid),]
