@@ -32,5 +32,6 @@
 | Figure3.R | Figure 3 |
 | Figure E1.R | Extended Data Fig. 1 |
 | Figure E2.R | Extended Data Fig. 2 |
+| Figure E4j.R | Extended Data Fig. 4j: IFI30 expression in tumor vs paratumor (in-house scRNA-seq, in-house bulk RNA-seq, TCGA-LIHC); inputs go in `data/IFI30_expression/` |
 | figure_helpers.R | Shared functions and colors sourced by the Figure scripts (run from the repository root; set `SIPEAC_PYTHON` to change the Python used for spatial plots) |
 | Extended_Analyses/ | Additional analyses; see its README |

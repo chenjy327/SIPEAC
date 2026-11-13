@@ -33,9 +33,28 @@ mycolor_merge <- c("#EE3743", "#33a02c", "#0B7FAB", "#6a3d9a", "#ff5084", "#ff7f
                    '#98689E','#E84115','#FFB5C5','#00FF7F','#F9D01C','#B03060','#00ABDC','#D2691E','#03A464','#FF7F00',
                    '#8968CD','#1C5B75')
 
+mycolor_new <- c("#F7CCC1", "#BCD1EC", "#9688BF", "#A8DEE0", "#F3BDD7", "#1B97A8", "#C3DDF3", "#F09AB7",
+                 "#E0E0DF", "#F9E0BD", "#78B0DD", "#FADBBF", "#8ACFE2", "#C198C4", "#ECA579", "#E97BAC",
+                 "#C0DA82", "#92D3F1", "#CFB5D5", "#94CAED", "#639EBC", "#D47AAD", "#94C54B", "#D6BEDB",
+                 "#E9866D", "#F1ADB4", "#7985C0", "#87BEE7", "#F1AE7A", "#F2A289", "#EBCC83", "#C67FB2",
+                 "#C9D1E9", "#F8C7A7", "#C6CDE8", "#E98D9B", "#F4D37A", "#6765AB", "#E585A4", "#F1A681",
+                 "#78C8D5", "#C58ADE", "#B1BEEA", "#90C4E9", "#8095CE", "#FEA78C", "#FFA3A6", "#F583B4",
+                 "#CD69A7", "#ED7179", "#D6A3DC", "#F7DB70", "#EABEBF", "#75CCE8", "#A5DEE5", "#80BEAF",
+                 "#B3DDD1", "#D1DCE2", "#F5B994", "#EE9C6A", "#FFF5E9", "#FFE5C0", "#EAD2DF", "#EDB5D2",
+                 "#C8A8DA", "#FEB396", "#FFCCBF", "#AED4D5", "#F9CC88", "#F5CEC7", "#E79796", "#FFB284",
+                 "#FFC98B", "#C6C09C", "#879E46", "#BBD5A6", "#FBCEB9", "#FEBD3D", "#E57B87", "#FFC4C8",
+                 "#FED154", "#BEE2F7", "#FEB25E", "#6AC7E6", "#FB93AC", "#9BC768", "#FDC7D4", "#FDD84C",
+                 "#BB9DCF", "#E49AAB", "#FFDFA2", "#BFE4FF", "#A3B5FD", "#C3C5F8", "#60EFDB", "#BEF2E5",
+                 "#C5E7F1", "#79CEED", "#6F89A2", "#85CBCD", "#F9E2AE", "#FBC78D", "#A7D676", "#85CBCD",
+                 "#A8DEE0", "#F9E2AE", "#FBC78D", "#D2A8B2", "#EDE1E5", "#DAE6E4", "#EECF65", "#DA9C25")
+
 col_clone_expanded <- c('#ffae3b', '#1F5392')
 names(col_clone_expanded) <- c("Expanded", "Singleton")
 
+
+mean_fun <- function(x){
+  return(data.frame(y = max(x), label = round(mean(x),3)))
+}
 
 SpatialFeaturePython <- function(obj,
                                  if_gene = F,
